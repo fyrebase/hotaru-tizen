@@ -54,11 +54,42 @@
   #signin h1 { font-size: 56px; font-weight: 600; margin: 0 0 48px; }
   #signin-msg { font-size: 36px; margin: 0; }
   #code { margin: 40px 0; font-size: 120px; font-weight: 600; letter-spacing: .25em; }
-  #choices button {
-    display: block; margin-bottom: 20px; padding: 16px 40px; border: 0; border-radius: 10px; outline: none;
-    background: #2a2a2d; color: inherit; font: inherit;
+  #choices .track { display: table; margin-bottom: 20px; }
+
+  /* An action button: a raised key at rest, set into its own recessed track (DESIGN.md). */
+  .track {
+    display: inline-block; padding: 6px; margin-right: 16px; border-radius: 16px; background: #0b0b0c;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, .8), 0 1px 0 rgba(255, 255, 255, .08);
   }
-  #choices button:focus { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+  .key {
+    display: block; padding: 14px 32px; border: 0; border-radius: 10px; outline: none;
+    background: #2a2a2d; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 2px 0 #000;
+    color: inherit; font: inherit; transition: box-shadow .15s;
+  }
+  .key:focus { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+  .key svg { width: 28px; height: 28px; margin: 0 12px -4px 0; }
+
+  /* A page's art, faint behind it, as on the Mac (BACKDROP there). */
+  #backdrop {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transition: opacity .6s;
+  }
+  #backdrop.in { opacity: .15; }
+  header { position: relative; }
+
+  .about { flex: 0 0 calc(100% - 32px); display: flex; align-items: flex-start; margin: 16px 16px 40px; }
+  .about-poster {
+    flex: none; width: 300px; height: 450px; margin-right: 48px; border-radius: 8px; object-fit: cover;
+    background: #1a1a1c; opacity: 0; transition: opacity .5s;
+  }
+  .about-poster.in { opacity: 1; }
+  .about-text { max-width: 1100px; }
+  .about-text > div { margin-bottom: 16px; }
+  .tagline { font-style: italic; }
+  .summary { font-size: 26px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .summary.long { -webkit-line-clamp: 10; }
+  .credits { font-size: 22px; }
+  .actions { padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -70,6 +101,7 @@
   </div>
 
   <main id="browse" hidden>
+    <img id="backdrop" alt="">
     <header><span id="title"></span><span id="status" class="dim"></span></header>
     <div id="grid"></div>
   </main>

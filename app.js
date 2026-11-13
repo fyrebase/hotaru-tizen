@@ -87,12 +87,51 @@ function oneEachShow(items) {
   });
 }
 
-// Lucide icons, for cards with no artwork.
+// Lucide icons: for cards with no artwork, and on action buttons.
+const lucide = (paths) =>
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+  paths +
+  '</svg>';
 const ICONS = {
-  history:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>'
+  history: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
+  play: lucide('<polygon points="6 3 20 12 6 21 6 3"/>'),
+  rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>')
 };
+
+const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+const tags = (list, n) => (list || []).slice(0, n).map((t) => t.tag).join(', ');
+
+// Shows and seasons: "12 episodes", or "5 of 12 watched" part way through.
+function episodes(a) {
+  const n = a.leafCount;
+  if (n == null) return '';
+  const w = a.viewedLeafCount || 0;
+  return w === 0 || w >= n ? plural(n, 'episode') : w + ' of ' + n + ' watched';
+}
+
+// The facts line on a page: "2021 · TV-14 · 2 seasons · ★ 8.1 · Animation, Action".
+function facts(a) {
+  const m = Math.floor((a.duration || 0) / 60000);
+  const runtime = a.type === 'movie' && m && (m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm');
+  return [
+    a.year,
+    a.contentRating,
+    runtime,
+    a.type === 'show' && a.childCount && plural(a.childCount, 'season'),
+    a.type === 'season' && episodes(a),
+    a.audienceRating && '★ ' + a.audienceRating.toFixed(1),
+    tags(a.Genre, 3)
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function credits(a) {
+  const by = (word, names) => names && word + ' ' + names;
+  return [a.studio, by('Directed by', tags(a.Director, 2)), by('Written by', tags(a.Writer, 2)), by('Starring', tags(a.Role, 4))]
+    .filter(Boolean)
+    .join('  ·  ');
+}
 
 // A server's addresses, best first: on the network before remote, relayed last. A local HTTPS
 // address is a plex.direct name, which some routers' DNS refuses to resolve to a private
@@ -190,21 +229,50 @@ const status = (text) => {
   $('status').textContent = text;
 };
 
+// A listing, and for a movie, show or season the item itself, which carries its details and
+// backdrop. A movie's page lists nothing else.
+async function load(path) {
+  const id = /^\/library\/metadata\/(\d+)(\/.*)?$/.exec(path);
+  if (!id) return { items: await list(path) };
+  if (!id[2]) return { items: [], about: (await list(path))[0] };
+  // A show's seasons, a season's episodes, or all a show's episodes: the listing has a line of
+  // summary at most, so fetch the item it lists too.
+  const both = await Promise.all([list(path), list('/library/metadata/' + id[1])]);
+  return { items: both[0], about: both[1][0] };
+}
+
 async function show(page) {
-  const grid = $('grid');
   $('title').textContent = page.title;
   status('');
-  grid.classList.remove('in');
-  let items;
+  $('grid').classList.remove('in');
+  backdrop(null);
   try {
-    items = page.key ? await list(page.key) : await sections();
+    page.data = page.key ? await load(page.key) : { items: await sections() };
   } catch (e) {
     return status(e.message);
   }
+  render(page);
+}
+
+// The show's or movie's art, faint behind its page, fading in once it has loaded.
+function backdrop(art) {
+  const img = $('backdrop');
+  const src = art ? url('/photo/:/transcode', { width: 1920, height: 1080, minSize: 1, url: art }) : '';
+  if (img.getAttribute('src') === src || (!src && !img.hasAttribute('src'))) return;
+  img.classList.remove('in');
+  if (src) img.src = src;
+  else img.removeAttribute('src');
+}
+
+function render(page) {
+  const grid = $('grid');
+  const d = page.data;
   grid.innerHTML = '';
   grid.scrollTop = 0;
+  backdrop(d.about && d.about.art);
+  if (d.about) grid.append(aboutBlock(d.about));
   // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
-  items.forEach((item) => {
+  d.items.forEach((item) => {
     const card = el('button', 'card');
     const img = new Image();
     img.loading = 'lazy';
@@ -218,10 +286,55 @@ async function show(page) {
     card.onclick = () => open(item);
     grid.append(card);
   });
-  if (!items.length) status('Nothing here');
-  focusCard(grid.children[page.at || 0]);
+  if (!d.items.length && !d.about) status('Nothing here');
+  focusCard(focusables()[page.at || 0]);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
+
+// A movie's, show's or season's details, heading its page. A movie's page has nothing else on
+// it, so it gets the poster and Play, and room for the whole summary.
+function aboutBlock(a) {
+  const movie = a.type === 'movie';
+  const box = el('div', 'about');
+  if (movie && a.thumb) {
+    const img = new Image();
+    img.className = 'about-poster';
+    img.onload = () => img.classList.add('in');
+    img.src = poster(a.thumb);
+    box.append(img);
+  }
+  const text = el('div', 'about-text');
+  const lines = [
+    ['dim', facts(a)],
+    ['tagline', a.tagline],
+    [movie ? 'summary long' : 'summary', a.summary],
+    ['dim credits', credits(a)]
+  ];
+  lines.forEach((l) => l[1] && text.append(el('div', l[0], noOrphan(l[1]))));
+  if (movie && a.Media) {
+    const actions = el('div', 'actions');
+    if (a.viewOffset > 0) {
+      actions.append(key('Resume', 'play', () => play(a)), key('Play from Start', 'rotateCcw', () => play(a, true)));
+    } else actions.append(key('Play', 'play', () => play(a)));
+    text.append(actions);
+  }
+  box.append(text);
+  return box;
+}
+
+// An action button, raised in its own inset track (DESIGN.md).
+function key(text, icon, onclick) {
+  const track = el('span', 'track');
+  const b = el('button', 'key');
+  b.innerHTML = icon ? ICONS[icon] : '';
+  b.append(text);
+  b.onclick = onclick;
+  track.append(b);
+  return track;
+}
+
+// Everything the D-pad can land on in the page: the details' buttons, then the cards.
+const focusables = () => Array.from($('grid').querySelectorAll('button'));
 
 function focusCard(card) {
   if (!card) return;
@@ -230,9 +343,14 @@ function focusCard(card) {
 }
 
 function open(item) {
-  if (item.Media) return play(item);
-  stack[stack.length - 1].at = Array.from($('grid').children).indexOf(document.activeElement);
-  stack.push({ title: item.title, key: item.key });
+  // A movie gets its page; an episode plays straight from its card.
+  if (item.Media && item.type !== 'movie') return play(item);
+  const top = stack[stack.length - 1];
+  top.at = focusables().indexOf(document.activeElement);
+  // A season's page leads with its show. "All episodes" doesn't name the show, but it's opened
+  // from the show's own page, whose title is the show.
+  const parent = item.parentTitle || (/\/allLeaves$/.test(item.key) && top.title);
+  stack.push({ title: parent ? parent + ' / ' + item.title : item.title, key: item.key });
   show(stack[stack.length - 1]);
 }
 
@@ -243,20 +361,37 @@ function back() {
   } else signIn(); // the libraries' Back: sign in again, or Back once more to stay
 }
 
-// D-pad: the focused card moves by one, or a row's worth of cards up and down.
-function move(dx, dy) {
-  const cards = Array.from($('grid').children);
-  if (!cards.length) return;
-  const i = cards.indexOf(document.activeElement);
-  if (i < 0) return focusCard(cards[0]);
-  const cols = cards.filter((c) => c.offsetTop === cards[0].offsetTop).length;
-  let j = i + dx + dy * cols;
-  // Down from above a short last row lands on its last card.
-  if (dy > 0 && j >= cards.length && Math.floor(i / cols) < Math.floor((cards.length - 1) / cols)) j = cards.length - 1;
-  focusCard(cards[j]);
+// D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons
+// and a grid's short last row need no special cases. Left and right stay within the row.
+function move(dir) {
+  const all = focusables();
+  const cur = document.activeElement;
+  if (all.indexOf(cur) < 0) return focusCard(all[0]);
+  focusCard(nearest(cur.getBoundingClientRect(), all.filter((b) => b !== cur).map((b) => [b, b.getBoundingClientRect()]), dir));
 }
 
-function play(item) {
+// The candidate (as [thing, rect]) nearest `from` in `dir`, weighing distance off the line of
+// travel double, so the next card in a row beats a nearer one in the next row.
+function nearest(from, candidates, dir) {
+  const mid = (r) => [r.left + r.width / 2, r.top + r.height / 2];
+  const a = mid(from);
+  let best = null;
+  let bestScore = Infinity;
+  candidates.forEach((c) => {
+    const b = mid(c[1]);
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const across = dir === 'left' || dir === 'right';
+    const along = { left: -dx, right: dx, up: -dy, down: dy }[dir];
+    if (along <= 1 || (across && Math.abs(dy) > from.height / 2)) return;
+    const score = along + 2 * Math.abs(across ? dy : dx);
+    if (score < bestScore) [best, bestScore] = [c[0], score];
+  });
+  return best;
+}
+
+// `fromStart`: ignore the item's resume point.
+function play(item, fromStart) {
   const s = stream(item);
   const v = $('video');
   playing = { item, session: s.session };
@@ -268,7 +403,7 @@ function play(item) {
     playing.hls.loadSource(s.src);
     playing.hls.attachMedia(v);
   } else v.src = s.src;
-  if (item.viewOffset) {
+  if (item.viewOffset && !fromStart) {
     v.addEventListener('loadedmetadata', () => (v.currentTime = item.viewOffset / 1000), { once: true });
   }
   v.play().catch(() => {});
@@ -302,6 +437,11 @@ function stop() {
   const v = $('video');
   clearInterval(playing.timer);
   report('stopped');
+  // The item's resume point as Plex now has it, so its card or page resumes from here without
+  // fetching it again: cleared past about 90%, where Plex marks it watched.
+  const it = playing.item;
+  const ms = v.currentTime * 1000;
+  if (ms > 0) it.viewOffset = it.duration && ms > 0.9 * it.duration ? 0 : ms;
   if (playing.hls) playing.hls.destroy();
   v.removeAttribute('src');
   v.load();
@@ -311,6 +451,12 @@ function stop() {
   }
   playing = null;
   $('player').hidden = true;
+  // A movie's page offers Resume or Play by where it was left.
+  const top = stack[stack.length - 1];
+  if (top && top.data && top.data.about === it) {
+    top.at = focusables().indexOf(document.activeElement);
+    render(top);
+  }
 }
 
 const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -352,12 +498,9 @@ function signinScreen(msg, code, choices) {
   $('code').textContent = code || '';
   const list = $('choices');
   list.innerHTML = '';
-  (choices || []).forEach((c) => {
-    const b = el('button', '', c[0]);
-    b.onclick = c[1];
-    list.append(b);
-  });
-  if (list.firstChild) list.firstChild.focus();
+  (choices || []).forEach((c) => list.append(key(c[0], null, c[1])));
+  const first = list.querySelector('button');
+  if (first) first.focus();
 }
 
 // Signing in through plex.tv/link: show a code, poll until it's entered, then pick a server.
@@ -421,7 +564,7 @@ function onKey(e) {
     return playerKey(k);
   }
   if (!$('signin').hidden) {
-    const buttons = Array.from($('choices').children);
+    const buttons = Array.from($('choices').querySelectorAll('button'));
     const next = { up: -1, down: 1 }[k];
     if (next) {
       e.preventDefault();
@@ -436,8 +579,7 @@ function onKey(e) {
   if (k === 'enter') return; // the focused card's own click
   e.preventDefault();
   if (k === 'back') return back();
-  const d = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[k];
-  if (d) move(d[0], d[1]);
+  if (k === 'left' || k === 'right' || k === 'up' || k === 'down') move(k);
 }
 
 function boot() {
@@ -447,6 +589,7 @@ function boot() {
   if (!localStorage.getItem('clientId')) localStorage.setItem('clientId', 'hotaru-tv-' + Math.random().toString(16).slice(2));
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
   document.addEventListener('keydown', onKey);
+  $('backdrop').onload = () => $('backdrop').classList.add('in');
   const v = $('video');
   v.ontimeupdate = time;
   v.onended = stop;
@@ -459,4 +602,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, RECENT };

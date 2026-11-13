@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
@@ -69,5 +69,26 @@ assert.deepEqual(
   ['ratingKey', 'key', 'state', 'time', 'duration'].map((k) => t.get(k)),
   ['7', '/library/metadata/7', 'paused', '61235', '2400000']
 );
+
+// A page's facts suit the kind of item, as on the Mac.
+const genres = ['Family', 'Comedy', 'Fantasy', 'Science Fiction'].map((tag) => ({ tag }));
+const movie = { type: 'movie', year: 1987, contentRating: 'PG', duration: 6389387, audienceRating: 6.44, Genre: genres };
+assert.equal(facts(movie), '1987 · PG · 1h 46m · ★ 6.4 · Family, Comedy, Fantasy');
+assert.equal(facts({ type: 'show', childCount: 1, duration: 2400000 }), '1 season');
+assert.equal(facts({ type: 'season', leafCount: 9 }), '9 episodes');
+assert.equal(facts({ type: 'season', leafCount: 9, viewedLeafCount: 4 }), '4 of 9 watched');
+assert.equal(credits({ studio: 'Amblin', Director: [{ tag: 'A' }], Role: [] }), 'Amblin  ·  Directed by A');
+assert.equal(credits({}), '');
+
+// The D-pad: across a row before down to the next, a short last row's nearest card, and
+// nothing past the end of a row.
+const box = (x, y) => ({ left: x, top: y, width: 100, height: 100 });
+const grid = [['a', box(0, 0)], ['b', box(200, 0)], ['c', box(400, 0)], ['d', box(0, 200)]];
+const from = (i, dir) => nearest(grid[i][1], grid.filter((g, j) => j !== i), dir);
+assert.equal(from(0, 'right'), 'b');
+assert.equal(from(2, 'down'), 'd');
+assert.equal(from(3, 'up'), 'a');
+assert.equal(from(2, 'right'), null);
+assert.equal(from(3, 'right'), null);
 
 console.log('ok');
