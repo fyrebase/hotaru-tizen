@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
@@ -50,6 +50,12 @@ const ep = (show, title) => ({ title, grandparentRatingKey: show, grandparentTit
 const once = oneEachShow([ep('1', 'a'), { title: 'Movie' }, ep('1', 'b'), ep('2', 'c')]);
 assert.deepEqual(once.map((i) => i.label || i.title), ['Show 1', 'Movie', 'Show 2']);
 assert.equal(once[0].thumb, '/t/1');
+
+// Card text: a season's episodes by number, Recently Played's under the show's name.
+const engram = { type: 'episode', title: 'The Engram', grandparentTitle: 'The Terminal List', parentIndex: 1, index: 2 };
+assert.deepEqual(label(engram), ['Episode 2', 'The Engram']);
+assert.deepEqual(label(Object.assign({ label: 'The Terminal List' }, engram)), ['The Terminal List', 'S1 · E2 · The Engram']);
+assert.deepEqual(label({ title: 'Heat', year: 1995 }), ['Heat', 1995]);
 
 // The episode after a finished one; none past the last, or if it's missing from the show.
 const eps = [{ ratingKey: '1' }, { ratingKey: '2' }];

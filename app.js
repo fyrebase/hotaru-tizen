@@ -44,6 +44,18 @@ async function upNext(ep) {
   return Object.assign(next, { thumb: ep.thumb, label: ep.label, sub: 'Next: ' + heading(next)[1] });
 }
 
+// A card's title and the detail under it. In a season, an episode is "Episode 2" over its
+// title, which would be cut off as the card's title. Under a show's name, as in Recently
+// Played, it's "S1 · E2 · Title".
+function label(item) {
+  if (item.label) return [item.label, item.sub || heading(item)[1]];
+  if (item.type === 'episode' && item.index != null) return ['Episode ' + item.index, item.title];
+  return [item.title, item.type === 'episode' ? heading(item)[1] : item.year];
+}
+
+// Wrapped text never ends on a lone word (DESIGN.md): the last two words share a no-break space.
+const noOrphan = (text) => text.replace(/ (\S+)$/, '\u00a0$1');
+
 function nextAfter(eps, ep) {
   const at = eps.findIndex((e) => e.ratingKey === ep.ratingKey);
   return at < 0 ? null : eps[at + 1] || null;
@@ -201,8 +213,8 @@ async function show(page) {
     const art = el('div', 'art');
     if (item.icon) art.innerHTML = ICONS[item.icon];
     else art.append(img);
-    const sub = item.sub || (item.type === 'episode' ? heading(item)[1] : item.year);
-    card.append(art, el('span', '', item.label || item.title), el('span', 'dim', sub ? String(sub) : ' '));
+    const text = label(item);
+    card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
     card.onclick = () => open(item);
     grid.append(card);
   });
@@ -427,4 +439,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, RECENT };
