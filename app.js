@@ -388,11 +388,9 @@ function back() {
   if (stack.length > 1) {
     stack.pop();
     show(stack[stack.length - 1]);
-  } else if (window.tizen) {
-    // The libraries' Back: to TizenBrew's menu. TizenBrew opened the app by navigating its own
-    // page here, so its menu is the page before.
-    history.back();
   }
+  // On the libraries, Back does nothing: holding Back returns to TizenBrew's menu, which
+  // TizenBrew handles itself (history.back() from here doesn't reach it).
 }
 
 // D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons

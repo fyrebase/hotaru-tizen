@@ -18,9 +18,9 @@ Serve the repo with `npx serve -l 8081` and open `http://localhost:8081` at a 19
 
 TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. Tag a release, or purge `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/<file>`, to see a change on the TV.
 
-On the owner's TV, TizenBrew autolaunches TizenTube. Pressing Up repeatedly while TizenBrew starts skips the autolaunch for that start. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
+On the owner's TV, TizenBrew's autolaunch is off; if it's on, pressing Up repeatedly while TizenBrew starts skips it for that start. Holding Back in a running app returns to TizenBrew's menu; history.back() from the app doesn't. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
 
-Running on the TV so far: sign-in, the libraries, D-pad navigation and HLS playback without hls.js.
+Running on the TV so far: sign-in and the Sign in card, the libraries, D-pad navigation, HLS playback without hls.js, and HEVC MP4 played straight off the server: Dolby Vision profile 8 (Tuner) shows as Dolby Vision, smoothly. Not yet checked there: the media keys.
 
 ## Guardrails
 
