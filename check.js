@@ -20,9 +20,22 @@ assert.equal(stream(item('mp4', 'hevc', 'aac', 'main 10'), chrome).session, unde
 assert.equal(asked[asked.length - 1], 'video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"');
 // The TV plays AC-3 sound; Chrome would play it silent, so Plex converts it.
 assert.equal(stream(item('mp4', 'hevc', 'eac3'), tvPlayer).session, undefined);
+// MKV too, asked for as Matroska.
+assert.equal(stream(item('mkv', 'hevc', 'aac'), chrome).session, undefined);
+assert.equal(asked[asked.length - 1], 'video/x-matroska; codecs="hvc1.1.6.L153.B0, mp4a.40.2"');
 
-for (const [container, codec, audio] of [['mp4', 'hevc', 'eac3'], ['mkv', 'h264', 'aac'], ['mp4', 'vc1', 'aac']]) {
-  const hls = stream(item(container, codec, audio), chrome);
+// Through Plex: sound or video the player can't take, a container it isn't asked about, DTS
+// sound the app has no name for, a player that says no to Matroska, and a retry via Plex.
+const noMkv = (type) => (/matroska/.test(type) ? '' : 'probably');
+const viaPlex = [
+  stream(item('mp4', 'hevc', 'eac3'), chrome),
+  stream(item('avi', 'h264', 'aac'), chrome),
+  stream(item('mkv', 'hevc', 'dca'), tvPlayer),
+  stream(item('mkv', 'hevc', 'aac'), noMkv),
+  stream(item('mp4', 'h264', 'aac'), chrome, true),
+  stream(item('mp4', 'vc1', 'aac'), chrome)
+];
+for (const hls of viaPlex) {
   assert.ok(hls.session);
   const u = new URL(hls.src);
   assert.equal(u.pathname, '/video/:/transcode/universal/start.m3u8');

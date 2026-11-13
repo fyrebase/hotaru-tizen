@@ -198,24 +198,29 @@ const CODECS = {
   alac: () => 'alac'
 };
 
+// The type `canPlayType` takes for each container Plex names.
+const CONTAINERS = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/mp4', mkv: 'video/x-matroska' };
+
 // Whether the player says it can play the file as it is, sound included: Chrome plays an MP4 with
 // AC-3 sound in silence, where the TV plays it whole. `canPlay` is the video element's
-// canPlayType, passed in so this needs no DOM.
-// ponytail: MP4 only. MKV, most of the library, goes to Plex, which re-encodes HEVC there;
-// remuxing it to HLS with the video untouched needs a client profile, tested on the TV.
+// canPlayType, passed in so this needs no DOM. A "yes" can still be wrong, MKV above all, so
+// `play` falls back to Plex when a file played this way fails to start.
 function directPlay(m, canPlay) {
   const p = m && m.Part && m.Part[0];
-  if (!p || ['mp4', 'm4v', 'mov'].indexOf(p.container) < 0) return false;
+  const type = p && CONTAINERS[p.container];
+  if (!type) return false;
   const codecs = [m.videoCodec, m.audioCodec].filter(Boolean).map((c) => CODECS[c] && CODECS[c](m));
-  return codecs.length > 0 && codecs.every(Boolean) && canPlay('video/mp4; codecs="' + codecs.join(', ') + '"') !== '';
+  return codecs.length > 0 && codecs.every(Boolean) && canPlay(type + '; codecs="' + codecs.join(', ') + '"') !== '';
 }
 
-// Plays straight off the server what the player can take as it is; anything else Plex remuxes to
-// HLS, re-encoding only what the profile can't take. `session` is the HLS session to stop afterwards.
-// ponytail: the Safari profile, as on the Mac, re-encodes HEVC; a Tizen profile could pass HEVC and HDR through.
-function stream(item, canPlay) {
+// Plays straight off the server what the player can take as it is; anything else, or anything
+// with `viaPlex`, Plex remuxes to HLS, re-encoding only what the profile can't take. `session` is
+// the HLS session to stop afterwards.
+// ponytail: the Safari profile, as on the Mac, re-encodes HEVC; a Tizen profile could pass HEVC
+// through what the player can't take whole, such as DTS sound.
+function stream(item, canPlay, viaPlex) {
   const m = (item.Media || [])[0];
-  if (directPlay(m, canPlay)) return { src: url(m.Part[0].key) };
+  if (!viaPlex && directPlay(m, canPlay)) return { src: url(m.Part[0].key) };
   const session = Date.now().toString(16) + Math.random().toString(16).slice(2, 8);
   const src = url('/video/:/transcode/universal/start.m3u8', {
     path: '/library/metadata/' + item.ratingKey,
@@ -428,13 +433,12 @@ function nearest(from, candidates, dir) {
   return best;
 }
 
-// `fromStart`: ignore the item's resume point.
-function play(item, fromStart) {
-  const v0 = $('video');
-  const s = stream(item, (type) => v0.canPlayType(type));
+// `fromStart`: ignore the item's resume point. `viaPlex`: never straight off the server.
+function play(item, fromStart, viaPlex) {
   const v = $('video');
+  const s = stream(item, (type) => v.canPlayType(type), viaPlex);
   // `tracks` stays null until the item's subtitle tracks are known; `track` -1 is off.
-  const p = (playing = { item, session: s.session, tracks: null, track: -1, cues: [] });
+  const p = (playing = { item, fromStart, session: s.session, tracks: null, track: -1, cues: [] });
   playing.timer = setInterval(() => report(v.paused ? 'paused' : 'playing'), 10000);
   subtitleTracks(item).then(
     (t) => (p.tracks = t),
@@ -899,8 +903,13 @@ function boot() {
   const v = $('video');
   v.ontimeupdate = time;
   v.onended = stop;
+  v.onplaying = () => playing && (playing.started = true);
   v.onerror = () => {
+    const p = playing;
     stop();
+    // A file the player said it could take but couldn't, before it ever played: through Plex
+    // instead, which a stream with a session already is.
+    if (p && !p.session && !p.started) return play(p.item, p.fromStart, true);
     status("That didn't play");
   };
   addEventListener('pagehide', stop);
