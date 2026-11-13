@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, parseCues, cuesAt, textStreams, rankFound, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
@@ -90,5 +90,35 @@ assert.equal(from(2, 'down'), 'd');
 assert.equal(from(3, 'up'), 'a');
 assert.equal(from(2, 'right'), null);
 assert.equal(from(3, 'right'), null);
+
+// Subtitles: SRT with a byte-order mark, tags and placement codes; WebVTT with a note, cue
+// settings and overlapping cues. The Mac's subs.rs test, ported.
+const srt =
+  '﻿1\r\n00:00:30,781 --> 00:00:33,659\r\n<i>Next entertainment</i>\r\nworld presents\r\n\r\n' +
+  '2\r\n00:01:02,000 --> 01:00:00,500\r\n{\\an8}Up top\r\n';
+let cues = parseCues(srt);
+assert.equal(cues.length, 2);
+assert.equal(cuesAt(cues, 31), 'Next entertainment\nworld presents');
+assert.equal(cuesAt(cues, 33.7), '');
+assert.equal(cuesAt(cues, 3600), 'Up top');
+cues = parseCues('WEBVTT\n\nNOTE made by hand\n\n00:05.000 --> 00:07.250 align:start\nHello\n\n00:06.000 --> 00:08.000\nThere\n');
+assert.equal(cuesAt(cues, 6.5), 'Hello\nThere');
+assert.equal(cuesAt(cues, 7.5), 'There');
+
+// Plex's text subtitle tracks, each with its file; embedded and image tracks left out.
+const full = {
+  Media: [{ Part: [{ id: 5, Stream: [
+    { streamType: 3, key: '/library/streams/1', codec: 'srt' },
+    { streamType: 3, codec: 'subrip' },
+    { streamType: 3, key: '/library/streams/2', codec: 'pgs' },
+    { streamType: 2, key: '/x', codec: 'aac' }
+  ] }] }]
+};
+assert.deepEqual(textStreams(full).map((x) => [x.part.id, x.stream.key]), [[5, '/library/streams/1']]);
+assert.deepEqual(textStreams({}), []);
+
+// OpenSubtitles results: an exact match first, then by score.
+const ranked = rankFound([{ key: 'a', score: '9' }, { key: 'b', score: '3', perfectMatch: '1' }, { key: 'c', score: '12' }, { key: 'd' }]);
+assert.deepEqual(ranked.map((f) => f.key), ['b', 'c', 'a', 'd']);
 
 console.log('ok');

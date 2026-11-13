@@ -24,5 +24,5 @@ Running on the TV so far: sign-in, the libraries, D-pad navigation and HLS playb
 
 ## Guardrails
 
-- The Plex server is the owner's real library, shared with other people. Reads are safe. Leave marking watched or unwatched (`scrobble`, `unscrobble`) untested against it. Test progress reports (`/:/timeline`) only on the item the owner set aside for it, The Terminal List S1 E1, since they move its resume point and can mark it watched. Stop only the HLS sessions this app started.
+- The Plex server is the owner's real library, shared with other people. Reads are safe. Leave marking watched or unwatched (`scrobble`, `unscrobble`) untested against it. Test progress reports (`/:/timeline`) and OpenSubtitles downloads only on the item the owner set aside for them, The Terminal List S1 E1: reports move its resume point and can mark it watched, and a download attaches and selects a subtitle track on the server for a few seconds before unselecting it. Searching OpenSubtitles only reads. Stop only the HLS sessions this app started.
 - Sign-in goes through plex.tv/link; the chosen server's address and token live in the browser's `localStorage`. Keep the token out of files, commits and command output.

@@ -95,7 +95,8 @@ const lucide = (paths) =>
 const ICONS = {
   history: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
   play: lucide('<polygon points="6 3 20 12 6 21 6 3"/>'),
-  rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>')
+  rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
+  check: lucide('<path d="M20 6 9 17l-5-5"/>')
 };
 
 const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
@@ -394,8 +395,14 @@ function nearest(from, candidates, dir) {
 function play(item, fromStart) {
   const s = stream(item);
   const v = $('video');
-  playing = { item, session: s.session };
+  // `tracks` stays null until the item's subtitle tracks are known; `track` -1 is off.
+  const p = (playing = { item, session: s.session, tracks: null, track: -1, cues: [] });
   playing.timer = setInterval(() => report(v.paused ? 'paused' : 'playing'), 10000);
+  subtitleTracks(item).then(
+    (t) => (p.tracks = t),
+    () => (p.tracks = [])
+  );
+  requestAnimationFrame(() => drawSubtitles(p));
   $('player').hidden = false;
   // Tizen plays HLS itself; desktop browsers without it get hls.js.
   if (s.session && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls) {
@@ -451,12 +458,269 @@ function stop() {
   }
   playing = null;
   $('player').hidden = true;
+  $('subs').textContent = '';
+  $('subs').hidden = true;
+  $('menu').hidden = true;
   // A movie's page offers Resume or Play by where it was left.
   const top = stack[stack.length - 1];
   if (top && top.data && top.data.about === it) {
     top.at = focusables().indexOf(document.activeElement);
     render(top);
   }
+}
+
+// An item's own record, with its files and their streams, which listings leave out.
+const metadata = async (item) => (await list('/library/metadata/' + item.ratingKey))[0] || {};
+
+// Subtitles in a file of their own beside the video on Plex, SRT or WebVTT, as text the app
+// draws, each with the file (part) it belongs to. Plex hands embedded tracks over only burned
+// into the picture, re-encoding it.
+function textStreams(full) {
+  const out = [];
+  (full.Media || []).forEach((m) =>
+    (m.Part || []).forEach((part) =>
+      (part.Stream || []).forEach((s) => {
+        if (s.streamType === 3 && s.key && (s.codec === 'srt' || s.codec === 'vtt')) out.push({ part, stream: s });
+      })
+    )
+  );
+  return out;
+}
+
+// The item's subtitles on Plex, as { title, key }, then any found on OpenSubtitles and kept,
+// as { title, text }.
+async function subtitleTracks(item) {
+  const onPlex = textStreams(await metadata(item)).map((x) => ({ title: x.stream.displayTitle || 'Subtitles', key: x.stream.key }));
+  return onPlex.concat(savedSubtitles(item));
+}
+
+// Found subtitles live in localStorage as "subs:<ratingKey>:<title>", one per kind of track:
+// picking another English result replaces the last. ponytail: kept until the storage is full,
+// after which a find still shows but isn't kept; prune the oldest if that bites.
+const SAVED = 'subs:';
+function savedSubtitles(item) {
+  const prefix = SAVED + item.ratingKey + ':';
+  const out = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k.indexOf(prefix) === 0) out.push({ title: k.slice(prefix.length), text: localStorage.getItem(k) });
+  }
+  return out;
+}
+
+// The TV's language, as two letters: "en".
+const language = () => (navigator.language || 'en').split('-')[0];
+
+// OpenSubtitles, searched through Plex: best match first, one made for this very file before
+// the rest.
+async function searchSubtitles(item, lang) {
+  const path = '/library/metadata/' + item.ratingKey + '/subtitles';
+  return rankFound((await getJson(url(path, { language: lang }))).MediaContainer.Stream || []);
+}
+
+const rankFound = (found) =>
+  found.slice().sort((a, b) => !!b.perfectMatch - !!a.perfectMatch || (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0));
+
+// Keeps a subtitle `searchSubtitles` found and returns it as a track. A result downloads only
+// once chosen, which has Plex fetch it in the background (~2 s), attach it to the item and select
+// it. Plex keeps a found track only while it's selected, and the transcoder burns a selected
+// track into the picture, re-encoding the video. So the text is taken, then the track
+// unselected, which drops it again and leaves the shared server as it was.
+async function downloadSubtitles(item, found) {
+  const put = (path, params) =>
+    fetch(url(path, params), { method: 'PUT' }).then((r) => {
+      if (!r.ok) throw new Error('Plex answered ' + r.status);
+    });
+  const before = textStreams(await metadata(item)).map((x) => x.stream.key);
+  await put('/library/metadata/' + item.ratingKey + '/subtitles', { key: found.key });
+  for (let i = 0; i < 20; i++) {
+    await sleep(1000);
+    // The track Plex attached: one that wasn't there before, not a file beside the video.
+    const added = textStreams(await metadata(item)).filter((x) => before.indexOf(x.stream.key) < 0)[0];
+    if (!added) continue;
+    let text;
+    try {
+      const r = await fetch(url(added.stream.key));
+      if (!r.ok) throw new Error('Plex answered ' + r.status);
+      text = await r.text();
+    } finally {
+      // Unselected whatever happened, so the server isn't left with it.
+      await put('/library/parts/' + added.part.id, { subtitleStreamID: 0, allParts: 1 });
+    }
+    const title = found.displayTitle || 'Subtitles';
+    try {
+      localStorage.setItem(SAVED + item.ratingKey + ':' + title, text);
+    } catch (e) {
+      // Storage full: shown this once, not kept.
+    }
+    return { title, text };
+  }
+  throw new Error("Plex didn't finish downloading them");
+}
+
+// SRT and WebVTT, whose cues are laid out the same way: a block per cue, its times on the line
+// with "-->", which skips the cue number, or a WebVTT header or note.
+function parseCues(src) {
+  return src
+    .replace(/\r\n/g, '\n')
+    .split('\n\n')
+    .map((block) => {
+      const lines = block.split('\n');
+      const at = lines.findIndex((l) => l.indexOf('-->') >= 0);
+      if (at < 0) return null;
+      const times = lines[at].split('-->');
+      // WebVTT can follow the end time with cue settings: "align:start".
+      const start = cueTime(times[0]);
+      const end = cueTime(times[1].trim().split(/\s+/)[0]);
+      // Drops styling: <i>…</i>, <font …>, and the {\an8} placement codes some SRT files carry.
+      // A blank line ends a cue, so any left here is the file's own last newline.
+      const text = lines
+        .slice(at + 1)
+        .filter((l) => l)
+        .map((l) => l.replace(/<[^>]*>|\{[^}]*\}/g, ''))
+        .join('\n');
+      return isNaN(start) || isNaN(end) || !text.trim() ? null : { start, end, text };
+    })
+    .filter(Boolean);
+}
+
+// "01:02:03,456", or WebVTT's "01:02:03.456" and "02:03.456".
+const cueTime = (s) =>
+  s.trim().replace(',', '.').split(':').reverse().reduce((t, part, i) => t + parseFloat(part) * [1, 60, 3600][i], 0);
+
+// The text showing `t` seconds in, cues that overlap one above the other.
+// ponytail: scans every cue, ~1,500 in a film, each frame. Binary search on start if it shows.
+const cuesAt = (cues, t) =>
+  cues
+    .filter((c) => c.start <= t && t < c.end)
+    .map((c) => c.text)
+    .join('\n');
+
+// Each frame while `p` plays: timeupdate comes only about every 250 ms, too coarse for subtitles.
+function drawSubtitles(p) {
+  if (playing !== p) return;
+  const text = cuesAt(p.cues, $('video').currentTime);
+  const box = $('subs');
+  if (box.textContent !== text) {
+    box.textContent = text;
+    box.hidden = !text;
+  }
+  requestAnimationFrame(() => drawSubtitles(p));
+}
+
+// Up (S on a keyboard): Off, the item's subtitle tracks, and a search of OpenSubtitles, over the
+// picture as it plays, the track showing checked and focused.
+function subtitleMenu() {
+  const p = playing;
+  if (!p.tracks) return flash('Looking for subtitles…');
+  const rows = [{ text: 'Off', on: p.track < 0, pick: () => setTrack(-1) }]
+    .concat(p.tracks.map((t, i) => ({ text: t.title, on: p.track === i, pick: () => setTrack(i) })))
+    .concat([{ text: 'Find on OpenSubtitles…', pick: findSubtitles }]);
+  showMenu(rows, p.track + 1);
+}
+
+// The menu's rows: { text, sub, on, pick }, or a line of text alone without `pick`.
+function showMenu(rows, focus) {
+  const list = $('menu-list');
+  list.innerHTML = '';
+  rows.forEach((r) => {
+    if (!r.pick) return list.append(el('div', 'dim note', r.text));
+    const b = el('button', r.on ? 'on' : '');
+    b.innerHTML = ICONS.check;
+    b.append(r.text);
+    if (r.sub) b.append(el('span', 'dim sub', r.sub));
+    b.onclick = r.pick;
+    list.append(b);
+  });
+  // Where focus was in the page, to hand it back on closing.
+  playing.focus = playing.focus || document.activeElement;
+  $('menu').hidden = false;
+  const buttons = list.querySelectorAll('button');
+  if (buttons.length) (buttons[focus] || buttons[0]).focus();
+}
+
+// The search: results in the TV's language, best first. Picking one downloads it through Plex,
+// keeps it, and shows it.
+function findSubtitles() {
+  const p = playing;
+  const open = () => playing === p && !$('menu').hidden;
+  showMenu([{ text: 'Searching OpenSubtitles…' }]);
+  searchSubtitles(p.item, language()).then(
+    (found) => {
+      if (!open()) return;
+      if (!found.length) return showMenu([{ text: 'Nothing found on OpenSubtitles' }]);
+      const rows = found.map((f) => ({
+        text: f.displayTitle || 'Subtitles',
+        // The release it was made for: "Shelter.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo".
+        sub: (f.perfectMatch ? 'Exact match · ' : '') + (f.title || ''),
+        pick: () => pickFound(p, f)
+      }));
+      showMenu(rows);
+    },
+    (e) => open() && showMenu([{ text: "Couldn't search: " + e.message }])
+  );
+}
+
+function pickFound(p, found) {
+  closeMenu();
+  flash('Downloading subtitles…', 25000);
+  downloadSubtitles(p.item, found).then(
+    (t) => {
+      if (playing !== p) return;
+      // It replaces one kept earlier of the same kind.
+      p.tracks = p.tracks.filter((x) => !(x.text && x.title === t.title)).concat(t);
+      setTrack(p.tracks.indexOf(t));
+      flash('Subtitles: ' + t.title);
+    },
+    (e) => playing === p && flash(e.message)
+  );
+}
+
+function closeMenu() {
+  $('menu').hidden = true;
+  if (playing && playing.focus) playing.focus.focus({ preventScroll: true });
+}
+
+// Up and Down move through the list, OK picks, Back or S closes it; playback carries on.
+function menuKey(k) {
+  const rows = Array.from($('menu-list').querySelectorAll('button'));
+  const at = rows.indexOf(document.activeElement);
+  const next = rows[at + ({ up: -1, down: 1 }[k] || 0)];
+  if ((k === 'up' || k === 'down') && next) next.focus();
+  // Only a row: with none focused, the page's own button would take the click.
+  if (k === 'enter' && at >= 0) rows[at].click();
+  if (k === 'back' || k === 'subs') closeMenu();
+}
+
+// Shows subtitle track `i`, or none at -1.
+function setTrack(i) {
+  const p = playing;
+  closeMenu();
+  p.track = i;
+  p.cues = [];
+  if (i < 0) return;
+  const t = p.tracks[i];
+  if (t.text) {
+    p.cues = parseCues(t.text);
+    return;
+  }
+  fetch(url(t.key))
+    .then((r) => {
+      if (!r.ok) throw new Error();
+      return r.text();
+    })
+    // Still the track asked for: not turned off or on to another since.
+    .then((text) => p.tracks[p.track] === t && (p.cues = parseCues(text)))
+    .catch(() => playing === p && flash("Couldn't load subtitles"));
+}
+
+// A short message over the picture, gone after `ms` (2 s) or when the next replaces it.
+let flashTimer;
+function flash(text, ms) {
+  $('flash').textContent = text;
+  $('flash').classList.add('in');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => $('flash').classList.remove('in'), ms || 2000);
 }
 
 const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -481,7 +745,11 @@ function osd() {
 
 function playerKey(k) {
   const v = $('video');
+  // The subtitle list takes the D-pad, OK and Back for itself, so Back closes the list rather
+  // than the video; the media keys still work the player.
+  if (!$('menu').hidden && ['up', 'down', 'left', 'right', 'enter', 'back', 'subs'].includes(k)) return menuKey(k);
   if (k === 'back' || k === 'stop') return stop();
+  if (k === 'up' || k === 'subs') return subtitleMenu();
   if (k === 'enter' || k === 'playpause') v.paused ? v.play() : v.pause();
   if (k === 'play') v.play();
   if (k === 'pause') v.pause();
@@ -553,7 +821,7 @@ function browse() {
 const KEYS = {
   37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'enter',
   10009: 'back', 27: 'back', 8: 'back',
-  10252: 'playpause', 32: 'playpause', 415: 'play', 19: 'pause', 413: 'stop', 412: 'rew', 417: 'ff'
+  10252: 'playpause', 32: 'playpause', 415: 'play', 19: 'pause', 413: 'stop', 412: 'rew', 417: 'ff', 83: 'subs'
 };
 
 function onKey(e) {
@@ -602,4 +870,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, parseCues, cuesAt, textStreams, rankFound, RECENT };
