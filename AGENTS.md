@@ -1,0 +1,24 @@
+# Hotaru for Samsung TVs
+
+A TizenBrew app module that browses and plays a Plex server: the TV counterpart of the macOS app in `../gpui-player`. `app.js` is the whole app, `index.html` its markup and styles, `package.json` the TizenBrew module manifest, and `check.js` the one test.
+
+## Working here
+
+- No framework and no build step. TizenBrew serves the repo's files as they are, through jsDelivr.
+- Write for Tizen 4, which runs Chromium 56: no `?.`, `??`, object spread, `.at()` or trailing commas in calls in JS; no CSS grid, flex `gap`, `aspect-ratio` or `inset`.
+- The Plex API usage, design rules and their reasons come from the Mac app: `../gpui-player/src/plex.rs` and `../gpui-player/DESIGN.md`. Port from there before inventing.
+- A `ponytail:` comment marks a deliberate shortcut and names its ceiling and the way past it.
+- Run `node check.js` after changing `stream`, `heading`, `clock` or `candidates`.
+
+## Testing in a desktop browser
+
+Serve the repo with `npx serve -l 8081` and open `http://localhost:8081` at a 1920×1080 viewport. It has to be a `localhost` or `127.0.0.1` address: Plex Media Server answers CORS only for those and `https://app.plex.tv`, so from a LAN address such as `http://192.168.1.17:8081` every server check fails and sign-in ends in "No Plex server on this account answered". From another machine, tunnel the port (`ssh -L 8081:localhost:8081 <mac>`). TizenBrew serves the app from `http://127.0.0.1:8081`, so the TV is fine. The arrow keys, Enter, Escape (Back) and Space (play/pause) stand in for the remote. hls.js plays HLS where the browser can't.
+
+## Publishing to the TV
+
+TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. Tag a release, or purge `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/<file>`, to see a change on the TV.
+
+## Guardrails
+
+- The Plex server is the owner's real library, shared with other people. Reads are safe. Leave marking watched or unwatched (`scrobble`, `unscrobble`, `/:/timeline`) untested against it, and stop only the HLS sessions this app started.
+- Sign-in goes through plex.tv/link; the chosen server's address and token live in the browser's `localStorage`. Keep the token out of files, commits and command output.

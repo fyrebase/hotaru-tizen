@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hotaru</title>
+<style>
+  /* No grid, flex gap, aspect-ratio or inset: Tizen 4 runs Chromium 56. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #141416; }
+  body { color: rgba(255, 255, 255, .85); font: 28px/1.3 system-ui, -apple-system, "Samsung One", sans-serif; }
+  [hidden] { display: none !important; }
+  .dim { color: rgba(255, 255, 255, .45); }
+
+  header { padding: 48px 80px 0; height: 72px; }
+  #title { font-size: 40px; }
+  #status { margin-left: 24px; }
+
+  #grid {
+    position: absolute; top: 120px; bottom: 0; left: 0; right: 0; overflow-y: auto;
+    padding: 40px 64px; display: flex; flex-wrap: wrap; align-content: flex-start;
+    opacity: 0; transition: opacity .5s;
+    /* ponytail: fixed edge fades; fade them by scroll position if they hide too much. */
+    -webkit-mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
+    mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  }
+  #grid.in { opacity: 1; }
+  .card {
+    width: 240px; margin: 16px; padding: 0; border: 0; background: none; outline: none;
+    color: inherit; font: inherit; text-align: left; transition: transform .15s;
+  }
+  .card:focus { transform: scale(1.06); }
+  .art { width: 240px; height: 360px; border-radius: 8px; overflow: hidden; background: #1a1a1c; transition: box-shadow .15s; }
+  .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+  .art img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
+  .art img.in { opacity: 1; }
+  .card span { display: block; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card span.dim { margin-top: 2px; font-size: 22px; }
+
+  #player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; }
+  #video { width: 100%; height: 100%; }
+  #osd {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 120px 80px 60px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .7)); opacity: 0; transition: opacity .4s;
+  }
+  #osd.in { opacity: 1; }
+  #osd-title { font-size: 40px; }
+
+  #signin { width: 960px; margin: 200px auto 0; }
+  #signin h1 { font-size: 56px; font-weight: 600; margin: 0 0 48px; }
+  #signin-msg { font-size: 36px; margin: 0; }
+  #code { margin: 40px 0; font-size: 120px; font-weight: 600; letter-spacing: .25em; }
+  #choices button {
+    display: block; margin-bottom: 20px; padding: 16px 40px; border: 0; border-radius: 10px; outline: none;
+    background: #2a2a2d; color: inherit; font: inherit;
+  }
+  #choices button:focus { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+</style>
+</head>
+<body>
+  <div id="signin" hidden>
+    <h1>Hotaru</h1>
+    <p id="signin-msg"></p>
+    <div id="code"></div>
+    <div id="choices"></div>
+  </div>
+
+  <main id="browse" hidden>
+    <header><span id="title"></span><span id="status" class="dim"></span></header>
+    <div id="grid"></div>
+  </main>
+
+  <div id="player" hidden>
+    <video id="video"></video>
+    <div id="osd"><div id="osd-title"></div><div id="osd-sub" class="dim"></div><div id="osd-time" class="dim"></div></div>
+  </div>
+
+  <!-- Only for desktop browsers without native HLS; the TV plays HLS itself. -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

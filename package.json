@@ -1,0 +1,12 @@
+{
+  "name": "hotaru-tizenbrew",
+  "version": "0.1.0",
+  "description": "Hotaru for Samsung TVs: browse and play a Plex server.",
+  "packageType": "app",
+  "appName": "Hotaru",
+  "appPath": "index.html",
+  "keys": ["MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop", "MediaRewind", "MediaFastForward"],
+  "scripts": {
+    "check": "node check.js"
+  }
+}
