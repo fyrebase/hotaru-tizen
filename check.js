@@ -3,14 +3,26 @@ const assert = require('assert');
 const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, parseCues, cuesAt, textStreams, rankFound, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
-const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
+const item = (container, codec, audio, profile) => ({
+  ratingKey: '7',
+  Media: [{ videoCodec: codec, audioCodec: audio, videoProfile: profile, Part: [{ key: '/p', container }] }]
+});
+// A player like desktop Chrome on a Mac: H.264 and HEVC, AAC but not AC-3.
+const asked = [];
+const chrome = (type) => (asked.push(type), /ac-3|ec-3/.test(type) ? '' : 'probably');
+const tvPlayer = () => 'probably';
 
-const direct = stream(item('mp4', 'h264'));
+const direct = stream(item('mp4', 'h264', 'aac'), chrome);
 assert.equal(direct.session, undefined);
 assert.ok(direct.src.startsWith('http://plex:32400/p?X-Plex-Token=t'));
+// HEVC in MP4 plays straight off the server too, asked for as Main 10 when it's 10-bit.
+assert.equal(stream(item('mp4', 'hevc', 'aac', 'main 10'), chrome).session, undefined);
+assert.equal(asked[asked.length - 1], 'video/mp4; codecs="hvc1.2.4.L153.B0, mp4a.40.2"');
+// The TV plays AC-3 sound; Chrome would play it silent, so Plex converts it.
+assert.equal(stream(item('mp4', 'hevc', 'eac3'), tvPlayer).session, undefined);
 
-for (const [container, codec] of [['mp4', 'hevc'], ['mkv', 'h264']]) {
-  const hls = stream(item(container, codec));
+for (const [container, codec, audio] of [['mp4', 'hevc', 'eac3'], ['mkv', 'h264', 'aac'], ['mp4', 'vc1', 'aac']]) {
+  const hls = stream(item(container, codec, audio), chrome);
   assert.ok(hls.session);
   const u = new URL(hls.src);
   assert.equal(u.pathname, '/video/:/transcode/universal/start.m3u8');

@@ -182,13 +182,38 @@ async function sections() {
 
 const poster = (thumb) => url('/photo/:/transcode', { width: 480, height: 720, minSize: 1, url: thumb });
 
-// H.264 MP4 plays straight off the server; anything else Plex remuxes to HLS, re-encoding only what
-// the profile can't take. `session` is the HLS session to stop afterwards.
-// ponytail: the Safari profile, as on the Mac, re-encodes HEVC; a Tizen profile could pass HEVC and HDR through.
-function stream(item) {
-  const m = (item.Media || [])[0];
+// The codecs parameter `canPlayType` takes for Plex's codec names. HEVC is asked for at level
+// 5.1, 4K's, and as Main 10 when the file is 10-bit, so a "yes" covers the file.
+const CODECS = {
+  h264: () => 'avc1.640028',
+  hevc: (m) => (m.videoProfile === 'main 10' ? 'hvc1.2.4.L153.B0' : 'hvc1.1.6.L153.B0'),
+  aac: () => 'mp4a.40.2',
+  ac3: () => 'ac-3',
+  eac3: () => 'ec-3',
+  mp3: () => 'mp4a.69',
+  flac: () => 'fLaC',
+  opus: () => 'Opus',
+  alac: () => 'alac'
+};
+
+// Whether the player says it can play the file as it is, sound included: Chrome plays an MP4 with
+// AC-3 sound in silence, where the TV plays it whole. `canPlay` is the video element's
+// canPlayType, passed in so this needs no DOM.
+// ponytail: MP4 only. MKV, most of the library, goes to Plex, which re-encodes HEVC there;
+// remuxing it to HLS with the video untouched needs a client profile, tested on the TV.
+function directPlay(m, canPlay) {
   const p = m && m.Part && m.Part[0];
-  if (p && ['mp4', 'm4v', 'mov'].includes(p.container) && m.videoCodec === 'h264') return { src: url(p.key) };
+  if (!p || ['mp4', 'm4v', 'mov'].indexOf(p.container) < 0) return false;
+  const codecs = [m.videoCodec, m.audioCodec].filter(Boolean).map((c) => CODECS[c] && CODECS[c](m));
+  return codecs.length > 0 && codecs.every(Boolean) && canPlay('video/mp4; codecs="' + codecs.join(', ') + '"') !== '';
+}
+
+// Plays straight off the server what the player can take as it is; anything else Plex remuxes to
+// HLS, re-encoding only what the profile can't take. `session` is the HLS session to stop afterwards.
+// ponytail: the Safari profile, as on the Mac, re-encodes HEVC; a Tizen profile could pass HEVC and HDR through.
+function stream(item, canPlay) {
+  const m = (item.Media || [])[0];
+  if (directPlay(m, canPlay)) return { src: url(m.Part[0].key) };
   const session = Date.now().toString(16) + Math.random().toString(16).slice(2, 8);
   const src = url('/video/:/transcode/universal/start.m3u8', {
     path: '/library/metadata/' + item.ratingKey,
@@ -393,7 +418,8 @@ function nearest(from, candidates, dir) {
 
 // `fromStart`: ignore the item's resume point.
 function play(item, fromStart) {
-  const s = stream(item);
+  const v0 = $('video');
+  const s = stream(item, (type) => v0.canPlayType(type));
   const v = $('video');
   // `tracks` stays null until the item's subtitle tracks are known; `track` -1 is off.
   const p = (playing = { item, session: s.session, tracks: null, track: -1, cues: [] });
