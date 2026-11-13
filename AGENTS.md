@@ -18,6 +18,10 @@ Serve the repo with `npx serve -l 8081` and open `http://localhost:8081` at a 19
 
 TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. Tag a release, or purge `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/<file>`, to see a change on the TV.
 
+On the owner's TV, TizenBrew autolaunches TizenTube. Pressing Up repeatedly while TizenBrew starts skips the autolaunch for that start. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
+
+Running on the TV so far: sign-in, the libraries, D-pad navigation and HLS playback without hls.js.
+
 ## Guardrails
 
 - The Plex server is the owner's real library, shared with other people. Reads are safe. Leave marking watched or unwatched (`scrobble`, `unscrobble`, `/:/timeline`) untested against it, and stop only the HLS sessions this app started.
