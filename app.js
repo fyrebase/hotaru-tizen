@@ -307,6 +307,11 @@ function render(page) {
   // The libraries end with a way to sign in to another account or server, as Back there leaves
   // the app. ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
   const items = page.key ? d.items : d.items.concat({ title: 'Sign in', sub: 'Another account or server', icon: 'logIn', pick: signIn });
+  // A library's whole listing gets the letter strip down its side and the search in the header.
+  const indexed = /^\/library\/sections\/\w+\/all$/.test(page.key || '');
+  grid.classList.toggle('indexed', indexed);
+  $('search').hidden = !indexed;
+  $('search').value = '';
   items.forEach((item) => {
     const card = el('button', 'card');
     const img = new Image();
@@ -319,8 +324,14 @@ function render(page) {
     const text = label(item);
     card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
     card.onclick = () => (item.pick ? item.pick() : open(item));
+    if (indexed && item.ratingKey) {
+      card.dataset.letter = letterOf(item);
+      card.dataset.find = fold(item.title + ' ' + (item.originalTitle || ''));
+    }
     grid.append(card);
   });
+  if (indexed) filter();
+  else letters(false);
   if (!d.items.length && !d.about) status('Nothing here');
   focusCard(focusables()[page.at || 0]);
   requestAnimationFrame(() => grid.classList.add('in'));
@@ -368,16 +379,78 @@ function key(text, icon, onclick) {
   return track;
 }
 
-// Everything the D-pad can land on in the page: the details' buttons, then the cards.
-const focusables = () => Array.from($('grid').querySelectorAll('button'));
+// The letter a title files under: its sort title's first, "#" for anything but A to Z, so
+// "The Last of Us" files under L.
+function letterOf(item) {
+  const c = (item.titleSort || item.title || '').charAt(0).toUpperCase();
+  return c >= 'A' && c <= 'Z' ? c : '#';
+}
+
+// The strip down a library's side: "#" and A to Z, each with titles a button that jumps to the
+// first of them, the rest dim. `firsts`: each letter's first card, or false for no strip.
+function letters(firsts) {
+  const strip = $('letters');
+  strip.innerHTML = '';
+  strip.hidden = !firsts;
+  if (!firsts) return;
+  '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach((l) => {
+    const b = el(firsts[l] ? 'button' : 'span', '', l);
+    b.dataset.letter = l;
+    if (firsts[l]) b.onclick = () => focusCard(firsts[l]);
+    strip.append(b);
+  });
+}
+
+// Whether a word in `text` starts with `q`, both folded; `q` may run across words: "last of".
+// Punctuation counts as a word break, so "sugar" finds "(Sugar)".
+const matchesWord = (text, q) => (' ' + text.replace(/[^a-z0-9]+/g, ' ')).indexOf(' ' + q.replace(/[^a-z0-9]+/g, ' ')) >= 0;
+
+// Lower case without accents, so "pok" finds "Pokémon".
+const fold = (s) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+
+// Shows the cards with a word in their title that starts with the search ("last" finds "The Last
+// of Us", "s" doesn't), all of them when it's empty, and rebuilds the strip from what shows:
+// each letter's first card, Plex listing them in sort order.
+function filter() {
+  const q = fold($('search').value.trim());
+  const firsts = {};
+  let matches = 0;
+  Array.from($('grid').querySelectorAll('.card')).forEach((c) => {
+    c.hidden = !!q && !matchesWord(c.dataset.find || '', q);
+    if (c.hidden) return;
+    matches++;
+    const l = c.dataset.letter;
+    if (l) firsts[l] = firsts[l] || c;
+  });
+  letters(firsts);
+  status(matches ? '' : 'No titles match');
+  $('grid').scrollTop = 0;
+}
+
+// Lights the strip's letter for the card in focus, so it shows where in the list you are.
+function lightLetter(e) {
+  const l = e.target.dataset.letter;
+  if (l) Array.from($('letters').children).forEach((b) => b.classList.toggle('on', b.dataset.letter === l));
+}
+
+// Everything the D-pad can land on in the page: the details' buttons, the cards, the strip, then
+// the search, last so a page opens on its first card. Cards the search hides are left out.
+const shown = (selector) => Array.from(document.querySelectorAll(selector)).filter((b) => !b.hidden);
+const focusables = () => shown('#grid button').concat(shown('#letters button'), shown('#search'));
 
 // The D-pad scrolls the page only by moving focus, and a show's details hold nothing to focus.
 // So the top row shows the page from its top, details and all; anything lower centres in view.
+// The letter strip doesn't scroll, so its letters only take focus.
 function focusCard(card) {
   if (!card) return;
   card.focus({ preventScroll: true });
+  if (!$('grid').contains(card)) return;
   const top = card.getBoundingClientRect().top;
-  if (focusables().some((b) => b.getBoundingClientRect().bottom <= top)) {
+  if (shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= top)) {
     card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   } else if ($('grid').scrollTo) $('grid').scrollTo({ top: 0, behavior: 'smooth' });
   else $('grid').scrollTop = 0; // Chromium 56 has no Element.scrollTo
@@ -404,13 +477,18 @@ function back() {
   // TizenBrew handles itself (history.back() from here doesn't reach it).
 }
 
-// D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons
-// and a grid's short last row need no special cases. Left and right stay within the row.
+// D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons,
+// a grid's short last row and the letter strip need no special cases. Left and right stay
+// within what overlaps the focus top to bottom: its row, or from a letter, the cards beside it.
 function move(dir) {
   const all = focusables();
   const cur = document.activeElement;
   if (all.indexOf(cur) < 0) return focusCard(all[0]);
-  focusCard(nearest(cur.getBoundingClientRect(), all.filter((b) => b !== cur).map((b) => [b, b.getBoundingClientRect()]), dir));
+  // Up and Down keep to the side focus is on, the strip or the page; Left and Right cross.
+  const strip = $('letters');
+  const side = (b) => dir === 'left' || dir === 'right' || strip.contains(b) === strip.contains(cur);
+  const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
+  focusCard(nearest(cur.getBoundingClientRect(), others, dir));
 }
 
 // The candidate (as [thing, rect]) nearest `from` in `dir`, weighing distance off the line of
@@ -426,7 +504,8 @@ function nearest(from, candidates, dir) {
     const dy = b[1] - a[1];
     const across = dir === 'left' || dir === 'right';
     const along = { left: -dx, right: dx, up: -dy, down: dy }[dir];
-    if (along <= 1 || (across && Math.abs(dy) > from.height / 2)) return;
+    const overlaps = c[1].top < from.top + from.height && c[1].top + c[1].height > from.top;
+    if (along <= 1 || (across && !overlaps)) return;
     const score = along + 2 * Math.abs(across ? dy : dx);
     if (score < bestScore) [best, bestScore] = [c[0], score];
   });
@@ -886,6 +965,15 @@ function onKey(e) {
     }
     return;
   }
+  // In the search, keys type, move the caret or work the TV's keyboard: Backspace deletes rather
+  // than going back, S and Space type. Down, or Back other than Backspace, returns to the cards.
+  if (e.target === $('search')) {
+    if (k === 'down' || (k === 'back' && e.keyCode !== 8)) {
+      e.preventDefault();
+      focusCard(shown('#grid button')[0]);
+    }
+    return;
+  }
   if (k === 'enter') return; // the focused card's own click
   e.preventDefault();
   if (k === 'back') return back();
@@ -899,6 +987,8 @@ function boot() {
   if (!localStorage.getItem('clientId')) localStorage.setItem('clientId', 'hotaru-tv-' + Math.random().toString(16).slice(2));
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
   document.addEventListener('keydown', onKey);
+  $('grid').addEventListener('focusin', lightLetter);
+  $('search').addEventListener('input', filter);
   $('backdrop').onload = () => $('backdrop').classList.add('in');
   const v = $('video');
   v.ontimeupdate = time;
@@ -917,4 +1007,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, parseCues, cuesAt, textStreams, rankFound, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, RECENT };

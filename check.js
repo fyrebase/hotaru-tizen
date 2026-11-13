@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, parseCues, cuesAt, textStreams, rankFound, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -117,6 +117,21 @@ assert.equal(from(3, 'up'), 'a');
 assert.equal(from(2, 'right'), null);
 assert.equal(from(3, 'right'), null);
 
+// The letter strip: Right from the right-hand card reaches the letter beside it, Up and Down
+// keep to the strip, and Left goes back to the card beside the letter, though their middles
+// aren't level.
+const strip = [['L', { left: 600, top: 30, width: 40, height: 30 }], ['M', { left: 600, top: 62, width: 40, height: 30 }]];
+const withStrip = grid.concat(strip);
+assert.equal(nearest(grid[2][1], withStrip.filter((g) => g[0] !== 'c'), 'right'), 'L');
+assert.equal(nearest(strip[0][1], withStrip.filter((g) => g[0] !== 'L'), 'down'), 'M');
+assert.equal(nearest(strip[1][1], withStrip.filter((g) => g[0] !== 'M'), 'left'), 'c');
+
+// Letters file under the sort title; anything but A to Z under #.
+assert.equal(letterOf({ title: 'The Last of Us', titleSort: 'Last of Us' }), 'L');
+assert.equal(letterOf({ title: 'heat' }), 'H');
+assert.equal(letterOf({ title: '28 Days Later' }), '#');
+assert.equal(letterOf({ title: 'Élite' }), '#');
+
 // Subtitles: SRT with a byte-order mark, tags and placement codes; WebVTT with a note, cue
 // settings and overlapping cues. The Mac's subs.rs test, ported.
 const srt =
@@ -146,5 +161,15 @@ assert.deepEqual(textStreams({}), []);
 // OpenSubtitles results: an exact match first, then by score.
 const ranked = rankFound([{ key: 'a', score: '9' }, { key: 'b', score: '3', perfectMatch: '1' }, { key: 'c', score: '12' }, { key: 'd' }]);
 assert.deepEqual(ranked.map((f) => f.key), ['b', 'c', 'a', 'd']);
+
+// Search matches the start of a word, ignoring case, accents and punctuation.
+const finds = (title, q) => matchesWord(fold(title), fold(q));
+assert.ok(finds('The Last of Us', 'last'));
+assert.ok(finds('The Last of Us', 'last of'));
+assert.ok(!finds('The Last of Us', 's'));
+assert.ok(finds('Pokémon', 'POK'));
+assert.ok(finds('Sugar (2024)', '2024'));
+assert.ok(finds("Tom Clancy's Jack Ryan", 'jack'));
+assert.ok(!finds('Westworld', 'world'));
 
 console.log('ok');

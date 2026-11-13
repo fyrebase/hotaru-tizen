@@ -14,6 +14,17 @@
   #title { font-size: 40px; }
   #status { margin-left: 24px; }
 
+  /* The search, in the recessed track every value sits in (DESIGN.md), with Lucide's search icon. */
+  #search {
+    position: absolute; top: 36px; right: 96px; width: 420px; box-sizing: border-box;
+    padding: 12px 20px 12px 60px; border: 0; border-radius: 12px; outline: none;
+    background: #0b0b0c no-repeat 20px center / 28px 28px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-opacity='.45' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, .8), 0 1px 0 rgba(255, 255, 255, .08);
+    color: inherit; font: inherit; font-size: 26px;
+  }
+  #search:focus { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+  #search::-webkit-input-placeholder { color: rgba(255, 255, 255, .45); }
+
   #grid {
     position: absolute; top: 120px; bottom: 0; left: 0; right: 0; overflow-y: auto;
     padding: 40px 64px; display: flex; flex-wrap: wrap; align-content: flex-start;
@@ -23,6 +34,22 @@
     mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
   }
   #grid.in { opacity: 1; }
+  #grid.indexed { right: 72px; }
+
+  /* The letter strip down a library's side. A letter with no titles is dim and can't take focus;
+     the focused card's letter is lit (DESIGN.md: on is bright, never a background). */
+  #letters {
+    position: absolute; top: 120px; bottom: 40px; right: 24px; width: 48px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+  }
+  #letters > * {
+    display: block; width: 40px; height: 32px; line-height: 32px; padding: 0; margin: 0;
+    border: 0; border-radius: 8px; outline: none; background: none; font: inherit; font-size: 20px;
+    text-align: center; color: rgba(255, 255, 255, .2);
+  }
+  #letters button { color: rgba(255, 255, 255, .45); }
+  #letters button.on { color: rgba(255, 255, 255, .85); }
+  #letters button:focus { color: rgba(255, 255, 255, .85); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85); }
   .card {
     width: 240px; margin: 16px; padding: 0; border: 0; background: none; outline: none;
     color: inherit; font: inherit; text-align: left; transition: transform .15s;
@@ -138,8 +165,9 @@
 
   <main id="browse" hidden>
     <img id="backdrop" alt="">
-    <header><span id="title"></span><span id="status" class="dim"></span></header>
+    <header><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden></header>
     <div id="grid"></div>
+    <div id="letters" hidden></div>
   </main>
 
   <div id="player" hidden>
