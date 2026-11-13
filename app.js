@@ -366,10 +366,16 @@ function key(text, icon, onclick) {
 // Everything the D-pad can land on in the page: the details' buttons, then the cards.
 const focusables = () => Array.from($('grid').querySelectorAll('button'));
 
+// The D-pad scrolls the page only by moving focus, and a show's details hold nothing to focus.
+// So the top row shows the page from its top, details and all; anything lower centres in view.
 function focusCard(card) {
   if (!card) return;
   card.focus({ preventScroll: true });
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const top = card.getBoundingClientRect().top;
+  if (focusables().some((b) => b.getBoundingClientRect().bottom <= top)) {
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else if ($('grid').scrollTo) $('grid').scrollTo({ top: 0, behavior: 'smooth' });
+  else $('grid').scrollTop = 0; // Chromium 56 has no Element.scrollTo
 }
 
 function open(item) {
