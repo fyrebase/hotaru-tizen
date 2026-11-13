@@ -68,6 +68,7 @@ const engram = { type: 'episode', title: 'The Engram', grandparentTitle: 'The Te
 assert.deepEqual(label(engram), ['Episode 2', 'The Engram']);
 assert.deepEqual(label(Object.assign({ label: 'The Terminal List' }, engram)), ['The Terminal List', 'S1 · E2 · The Engram']);
 assert.deepEqual(label({ title: 'Heat', year: 1995 }), ['Heat', 1995]);
+assert.deepEqual(label({ title: 'Sign in', sub: 'Another account or server' }), ['Sign in', 'Another account or server']);
 
 // The episode after a finished one; none past the last, or if it's missing from the show.
 const eps = [{ ratingKey: '1' }, { ratingKey: '2' }];

@@ -46,9 +46,10 @@ async function upNext(ep) {
 
 // A card's title and the detail under it. In a season, an episode is "Episode 2" over its
 // title, which would be cut off as the card's title. Under a show's name, as in Recently
-// Played, it's "S1 · E2 · Title".
+// Played, it's "S1 · E2 · Title". A card the app makes itself brings its own `sub`.
 function label(item) {
   if (item.label) return [item.label, item.sub || heading(item)[1]];
+  if (item.sub) return [item.title, item.sub];
   if (item.type === 'episode' && item.index != null) return ['Episode ' + item.index, item.title];
   return [item.title, item.type === 'episode' ? heading(item)[1] : item.year];
 }
@@ -96,7 +97,8 @@ const ICONS = {
   history: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
   play: lucide('<polygon points="6 3 20 12 6 21 6 3"/>'),
   rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
-  check: lucide('<path d="M20 6 9 17l-5-5"/>')
+  check: lucide('<path d="M20 6 9 17l-5-5"/>'),
+  logIn: lucide('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>')
 };
 
 const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
@@ -297,8 +299,10 @@ function render(page) {
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
   if (d.about) grid.append(aboutBlock(d.about));
-  // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
-  d.items.forEach((item) => {
+  // The libraries end with a way to sign in to another account or server, as Back there leaves
+  // the app. ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
+  const items = page.key ? d.items : d.items.concat({ title: 'Sign in', sub: 'Another account or server', icon: 'logIn', pick: signIn });
+  items.forEach((item) => {
     const card = el('button', 'card');
     const img = new Image();
     img.loading = 'lazy';
@@ -309,7 +313,7 @@ function render(page) {
     else art.append(img);
     const text = label(item);
     card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
-    card.onclick = () => open(item);
+    card.onclick = () => (item.pick ? item.pick() : open(item));
     grid.append(card);
   });
   if (!d.items.length && !d.about) status('Nothing here');
@@ -384,7 +388,11 @@ function back() {
   if (stack.length > 1) {
     stack.pop();
     show(stack[stack.length - 1]);
-  } else signIn(); // the libraries' Back: sign in again, or Back once more to stay
+  } else if (window.tizen) {
+    // The libraries' Back: to TizenBrew's menu. TizenBrew opened the app by navigating its own
+    // page here, so its menu is the page before.
+    history.back();
+  }
 }
 
 // D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons
