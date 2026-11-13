@@ -260,6 +260,7 @@ function play(item) {
   const s = stream(item);
   const v = $('video');
   playing = { item, session: s.session };
+  playing.timer = setInterval(() => report(v.paused ? 'paused' : 'playing'), 10000);
   $('player').hidden = false;
   // Tizen plays HLS itself; desktop browsers without it get hls.js.
   if (s.session && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls) {
@@ -277,11 +278,30 @@ function play(item) {
   osd();
 }
 
-// ponytail: no /:/timeline reports, so Plex sees no progress or watched state; add them with
-// the same care as the Mac app, since the library is shared.
+// Progress for Plex, as the Mac app sends it: every 10 s while playing or paused, and once on
+// stopping. It's what resumes the item elsewhere, and Plex marks it watched past about 90%.
+function timeline(item, state, ms) {
+  return url('/:/timeline', {
+    ratingKey: item.ratingKey,
+    key: '/library/metadata/' + item.ratingKey,
+    state,
+    time: Math.round(ms),
+    duration: item.duration || 0
+  });
+}
+
+// Never at 0: that's a stream that failed to start, or one left before the resume seek, and
+// reporting it would wipe the item's place. ponytail: best effort, the next tick retries.
+function report(state) {
+  const ms = $('video').currentTime * 1000;
+  if (playing && ms > 0) fetch(timeline(playing.item, state, ms), { keepalive: true }).catch(() => {});
+}
+
 function stop() {
   if (!playing) return;
   const v = $('video');
+  clearInterval(playing.timer);
+  report('stopped');
   if (playing.hls) playing.hls.destroy();
   v.removeAttribute('src');
   v.load();
@@ -439,4 +459,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, RECENT };

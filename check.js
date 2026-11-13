@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
@@ -62,5 +62,12 @@ const eps = [{ ratingKey: '1' }, { ratingKey: '2' }];
 assert.equal(nextAfter(eps, { ratingKey: '1' }).ratingKey, '2');
 assert.equal(nextAfter(eps, { ratingKey: '2' }), null);
 assert.equal(nextAfter(eps, { ratingKey: '9' }), null);
+
+// Progress reports name the item, its state, and whole milliseconds.
+const t = new URL(timeline({ ratingKey: '7', duration: 2400000 }, 'paused', 61234.5)).searchParams;
+assert.deepEqual(
+  ['ratingKey', 'key', 'state', 'time', 'duration'].map((k) => t.get(k)),
+  ['7', '/library/metadata/7', 'paused', '61235', '2400000']
+);
 
 console.log('ok');
