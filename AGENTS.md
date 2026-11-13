@@ -16,7 +16,7 @@ Serve the repo with `npx serve -l 8081` and open `http://localhost:8081` at a 19
 
 ## Publishing to the TV
 
-TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. Tag a release, or purge `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/<file>`, to see a change on the TV.
+TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. To see a change on the TV sooner, purge each changed file once, a few seconds after pushing: `https://purge.jsdelivr.net/gh/<owner>/<repo>/<file>`. Repeated purges get a file throttled (`"throttled": true`) for about half an hour, and purging while throttled seems to extend it. To test a commit at once, add the module pinned to it, `<owner>/<repo>@<sha>`, which jsDelivr has never cached; remove it afterwards.
 
 On the owner's TV, TizenBrew's autolaunch is off; if it's on, pressing Up repeatedly while TizenBrew starts skips it for that start. Holding Back in a running app returns to TizenBrew's menu; history.back() from the app doesn't. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
 
