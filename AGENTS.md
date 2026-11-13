@@ -8,7 +8,7 @@ A TizenBrew app module that browses and plays a Plex server: the TV counterpart 
 - Write for Tizen 4, which runs Chromium 56: no `?.`, `??`, object spread, `.at()` or trailing commas in calls in JS; no CSS grid, flex `gap`, `aspect-ratio` or `inset`.
 - The Plex API usage, design rules and their reasons come from the Mac app: `../gpui-player/src/plex.rs` and `../gpui-player/DESIGN.md`. Port from there before inventing.
 - A `ponytail:` comment marks a deliberate shortcut and names its ceiling and the way past it.
-- Run `node check.js` after changing `stream`, `heading`, `clock` or `candidates`.
+- Run `node check.js` after changing anything it exercises: it covers the pure functions `app.js` exports.
 
 ## Testing in a desktop browser
 

@@ -26,8 +26,61 @@ const plexTv = (path, params, method) => getJson(withParams(PLEX_TV + path, Obje
 
 async function list(path) {
   const mc = (await getJson(url(path))).MediaContainer;
-  return (mc.Directory || []).concat(mc.Metadata || []);
+  const items = (mc.Directory || []).concat(mc.Metadata || []);
+  const recent = recentFolder(path, mc.viewGroup);
+  if (recent) items.unshift(recent);
+  return path.endsWith(RECENT) ? Promise.all(oneEachShow(items).map(upNext)) : items;
 }
+
+// A finished episode's card moves on to the episode after it, so OK plays what's next rather than
+// the end credits again. An episode part way through, even a rewatch, stays put and resumes.
+// One lookup per finished show, all at once; a failed one, or the show's last episode, leaves
+// the card as it was.
+async function upNext(ep) {
+  if (!ep.grandparentRatingKey || !ep.viewCount || ep.viewOffset) return ep;
+  const eps = await list(`/library/metadata/${ep.grandparentRatingKey}/allLeaves`).catch(() => []);
+  const next = nextAfter(eps, ep);
+  if (!next) return ep;
+  return Object.assign(next, { thumb: ep.thumb, label: ep.label, sub: 'Next: ' + heading(next)[1] });
+}
+
+function nextAfter(eps, ep) {
+  const at = eps.findIndex((e) => e.ratingKey === ep.ratingKey);
+  return at < 0 ? null : eps[at + 1] || null;
+}
+
+// Most recently watched first; the filter drops never-watched items.
+const RECENT = 'sort=lastViewedAt:desc&lastViewedAt%3E%3E=0&X-Plex-Container-Start=0&X-Plex-Container-Size=100';
+
+// A movie or TV library's "all" listing opens with a Recently Played folder. Shows are listed
+// by episode, so each entry says where you are in the show.
+function recentFolder(path, viewGroup) {
+  const id = /^\/library\/sections\/(\w+)\/all$/.exec(path);
+  const type = { movie: 1, show: 4 }[viewGroup];
+  if (!id || !type) return null;
+  return { title: 'Recently Played', icon: 'history', key: `/library/sections/${id[1]}/all?type=${type}&${RECENT}` };
+}
+
+// One card per show, its latest episode, under the show's name and poster: episode stills are 16:9.
+function oneEachShow(items) {
+  const seen = {};
+  return items.filter((i) => {
+    const show = i.grandparentRatingKey;
+    if (!show) return true;
+    if (seen[show]) return false;
+    seen[show] = true;
+    i.thumb = i.grandparentThumb || i.thumb;
+    i.label = i.grandparentTitle;
+    return true;
+  });
+}
+
+// Lucide icons, for cards with no artwork.
+const ICONS = {
+  history:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>'
+};
 
 // A server's addresses, best first: on the network before remote, relayed last. A local HTTPS
 // address is a plex.direct name, which some routers' DNS refuses to resolve to a private
@@ -146,9 +199,10 @@ async function show(page) {
     img.onload = () => img.classList.add('in');
     if (item.thumb) img.src = poster(item.thumb);
     const art = el('div', 'art');
-    art.append(img);
-    const sub = item.type === 'episode' ? heading(item)[1] : item.year;
-    card.append(art, el('span', '', item.title), el('span', 'dim', sub ? String(sub) : ' '));
+    if (item.icon) art.innerHTML = ICONS[item.icon];
+    else art.append(img);
+    const sub = item.sub || (item.type === 'episode' ? heading(item)[1] : item.year);
+    card.append(art, el('span', '', item.label || item.title), el('span', 'dim', sub ? String(sub) : ' '));
     card.onclick = () => open(item);
     grid.append(card);
   });
@@ -373,4 +427,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, stream, heading, clock, candidates };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, RECENT };

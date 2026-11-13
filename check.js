@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, stream, heading, clock, candidates } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec) => ({ ratingKey: '7', Media: [{ videoCodec: codec, Part: [{ key: '/p', container }] }] });
@@ -35,5 +35,26 @@ assert.deepEqual(
   ]),
   ['https://local', 'http://10.0.0.2:32400', 'https://remote', 'https://relay']
 );
+
+// Movie and TV libraries open on Recently Played; not inside the folder itself, nor in a show's seasons.
+const tv = recentFolder('/library/sections/2/all', 'show');
+assert.equal(tv.key, '/library/sections/2/all?type=4&' + RECENT);
+assert.ok(recentFolder('/library/sections/1/all', 'movie').key.includes('type=1&'));
+assert.equal(recentFolder('/library/sections/3/all', 'artist'), null);
+assert.equal(recentFolder(tv.key, 'show'), null);
+assert.equal(recentFolder('/library/metadata/7/children', 'show'), null);
+// The filter survives url() re-encoding the query.
+assert.equal(new URL(url(tv.key)).searchParams.get('lastViewedAt>>'), '0');
+
+const ep = (show, title) => ({ title, grandparentRatingKey: show, grandparentTitle: 'Show ' + show, grandparentThumb: '/t/' + show });
+const once = oneEachShow([ep('1', 'a'), { title: 'Movie' }, ep('1', 'b'), ep('2', 'c')]);
+assert.deepEqual(once.map((i) => i.label || i.title), ['Show 1', 'Movie', 'Show 2']);
+assert.equal(once[0].thumb, '/t/1');
+
+// The episode after a finished one; none past the last, or if it's missing from the show.
+const eps = [{ ratingKey: '1' }, { ratingKey: '2' }];
+assert.equal(nextAfter(eps, { ratingKey: '1' }).ratingKey, '2');
+assert.equal(nextAfter(eps, { ratingKey: '2' }), null);
+assert.equal(nextAfter(eps, { ratingKey: '9' }), null);
 
 console.log('ok');
