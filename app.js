@@ -471,6 +471,12 @@ function open(item) {
 }
 
 function back() {
+  // A search is cleared before the page is left, the TV's keyboard being the only other way.
+  if (!$('search').hidden && $('search').value) {
+    $('search').value = '';
+    filter();
+    return focusCard(shown('#grid button')[0]);
+  }
   if (stack.length > 1) {
     stack.pop();
     show(stack[stack.length - 1]);
