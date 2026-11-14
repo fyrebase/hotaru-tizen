@@ -116,12 +116,18 @@
   }
   .card.wide .art { padding-bottom: 56.25%; }
   .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85), 0 20px 44px rgba(0, 0, 0, .9), 0 4px 10px rgba(0, 0, 0, .7); }
+  /* Off in Settings, General: the library only, the playing overlay's one poster keeps its own. */
+  .flat #browse .art { box-shadow: none; }
+  .flat #browse .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
   /* Solid, not translucent: where the icon's strokes cross, a translucent colour doubles up into
      brighter joins. #818182 is the dim text colour, 45% white, as it falls on the card's #1a1a1c. */
   .art svg { position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; color: #818182; }
   .art img {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
     opacity: 0; transition: opacity .5s;
+    /* Its own corners: while it fades in, Chromium 56 draws it as a layer of its own, which the
+       box's rounded overflow doesn't clip until the fade ends. */
+    border-radius: inherit;
   }
   .art img.in { opacity: 1; }
   /* A lit edge over the art, as on a raised key: a rim along the top that runs down the sides,
@@ -141,7 +147,7 @@
     mask-composite: exclude;
   }
   /* Off in Settings, General: each card's two overlay blends cost a slow TV every frame. */
-  .no-edge .art::before, .no-edge .art::after { display: none; }
+  .flat .art::before, .flat .art::after { display: none; }
   .card span { display: block; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The detail wraps to four lines at most, and always takes all four, so every card in a grid
      is the same height. -webkit-box is the line clamp Chromium 56 knows. */

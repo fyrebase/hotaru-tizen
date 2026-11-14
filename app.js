@@ -110,6 +110,7 @@ const ICONS = {
   eye: lucide('<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>'),
   eyeClosed: lucide('<path d="m15 18-.722-3.25"/><path d="M2 8a10.645 10.645 0 0 0 20 0"/><path d="m20 15-1.726-2.05"/><path d="m4 15 1.726-2.05"/><path d="m9 18 .722-3.25"/>'),
   settings2: lucide('<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'),
+  monitorPlay: lucide('<path d="M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z"/><path d="M12 17v4"/><path d="M8 21h8"/><rect x="2" y="3" width="20" height="14" rx="2"/>'),
   captions: lucide('<rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/>'),
   server: lucide('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/>')
 };
@@ -1080,7 +1081,9 @@ function osd() {
   time();
   $('osd').classList.add('in');
   clearTimeout(osdTimer);
-  osdTimer = setTimeout(() => $('osd').classList.remove('in'), 3000);
+  // Paused, it stays as long as Settings says, to read; playing, it gets out of the way.
+  const secs = $('video').paused ? prefValue(prefOf('pausedOverlay')) : 3;
+  osdTimer = setTimeout(() => $('osd').classList.remove('in'), secs * 1000);
 }
 
 function playerKey(k) {
@@ -1137,9 +1140,13 @@ const SUBTITLE_PREFS = [
 const CARD_PREFS = [
   { name: 'cardTilt', label: 'Tilt cards', detail: 'A card leans in from the way the D-pad moved.', def: 1, min: 0, max: 1, toggle: true },
   { name: 'cardGlimmer', label: 'Card glimmer', detail: 'A band of light sweeps a card as it takes focus.', def: 1, min: 0, max: 1, toggle: true },
-  { name: 'cardEdge', label: 'Lit card edges', detail: 'A rim and a glow of light along the top of each card.', def: 1, min: 0, max: 1, toggle: true }
+  // ponytail: still saved as cardEdge, from when it was the edges alone, so it keeps its setting.
+  { name: 'cardEdge', label: 'Lit edges and shadows', detail: 'A rim of light along the top of each card, and a soft shadow under it.', def: 1, min: 0, max: 1, toggle: true }
 ];
-const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS).filter((p) => p.name === name)[0];
+const PLAYER_PREFS = [
+  { name: 'pausedOverlay', label: 'Overlay when paused', detail: 'How long the title and seek bar stay up after pausing.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
+];
+const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS, PLAYER_PREFS).filter((p) => p.name === name)[0];
 
 function prefValue(p) {
   const saved = localStorage.getItem(p.name);
@@ -1160,7 +1167,7 @@ function subtitleStyle() {
   s.setProperty('--subs-padding', v.subtitlePadding / 2 + 'px ' + v.subtitlePadding + 'px');
   s.setProperty('--subs-radius', v.subtitleRadius + 'px');
   // Not a subtitle style, but set here so it follows Settings at once and from boot.
-  document.documentElement.classList.toggle('no-edge', !prefValue(prefOf('cardEdge')));
+  document.documentElement.classList.toggle('flat', !prefValue(prefOf('cardEdge')));
 }
 
 // Settings, laid out as the Mac app's (its src/settings.rs): its pages down a sidebar, the one
@@ -1171,6 +1178,7 @@ function subtitleStyle() {
 // first returns to the sidebar. Back from the sidebar closes it, handing focus back.
 const SETTINGS_PAGES = [
   { title: 'General', icon: 'settings2', draw: generalPage },
+  { title: 'Playback', icon: 'monitorPlay', draw: (page) => prefRows(page, PLAYER_PREFS) },
   { title: 'Subtitles', icon: 'captions', draw: subtitlesPage },
   { title: 'Plex', icon: 'server', draw: plexPage }
 ];
