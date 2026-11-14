@@ -688,7 +688,8 @@ function render(page) {
   // lists nothing, so its cast follows its details.
   if (d.cast) grid.append(el('div', 'season-head', 'Cast'), castBlock(d.cast));
   if (d.person) {
-    d.person.credits.forEach((g) => g.Credit && g.Credit.length && grid.append(el('div', 'season-head', g.title), creditList(g, d.items)));
+    // Discover's Appearances are talk shows, award shows and archive footage, not parts played.
+    d.person.credits.filter((g) => g.title !== 'Appearances').forEach((g) => g.Credit && g.Credit.length && grid.append(el('div', 'season-head', g.title), creditList(g, d.items)));
   }
   if (virt && indexed) filter();
   else letters(false);
