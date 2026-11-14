@@ -430,12 +430,43 @@ async function show(page) {
   status('');
   $('grid').classList.remove('in');
   backdrop(null);
+  busy(true);
   try {
     page.data = page.person ? await loadPerson(page) : page.key ? await load(page.key) : { items: await sections() };
   } catch (e) {
+    await busy(false);
     return status(e.message);
   }
+  await busy(false);
   render(page);
+}
+
+// The spinner over whatever is loading, a page or the video (DESIGN.md): only once the load has
+// taken 0.3s, so a quick one doesn't flash it, and then up for 0.9s at least. The first page
+// after signing in has the breathing logo instead (#browse.launch), always, for 0.9s at least.
+// busy(false) resolves as that hold ends and the spinner fades, for the page to fade in with it.
+// A load that starts again during the hold keeps the spinner up.
+let spinner = null; // { since, wait, done }
+async function busy(on) {
+  let s = spinner;
+  if (on) {
+    if (s) return void (s.done = false);
+    s = spinner = { since: 0, done: false };
+    if ($('browse').classList.contains('launch')) s.since = Date.now();
+    else s.wait = setTimeout(() => {
+      s.since = Date.now();
+      $('spinner').classList.add('in');
+    }, 300);
+    return;
+  }
+  if (!s || s.done) return;
+  clearTimeout(s.wait);
+  s.done = true;
+  if (s.since) await sleep(s.since + 900 - Date.now());
+  if (spinner !== s || !s.done) return;
+  spinner = null;
+  $('spinner').classList.remove('in');
+  $('browse').classList.remove('launch');
 }
 
 // The show's or movie's art, faint behind its page, fading in once it has loaded.
@@ -875,7 +906,8 @@ function play(item, fromStart, viaPlex) {
   if (item.viewOffset && !fromStart) {
     v.addEventListener('loadedmetadata', () => (v.currentTime = item.viewOffset / 1000), { once: true });
   }
-  v.play().catch(() => {});
+  busy(true);
+  v.play().catch(() => busy(false));
   const h = heading(item);
   const t = $('osd-title');
   t.innerHTML = '';
@@ -929,6 +961,7 @@ function stop() {
   }
   const from = playing.from;
   playing = null;
+  busy(false);
   $('player').hidden = true;
   $('browse').classList.remove('away');
   focusStill(from);
@@ -1566,6 +1599,7 @@ function use(server) {
 function browse() {
   $('signin').hidden = true;
   $('browse').hidden = false;
+  $('browse').classList.add('launch');
   stack.length = 0;
   stack.push({ title: cfg.name || 'Libraries' });
   show(stack[0]);
@@ -1665,7 +1699,13 @@ function boot() {
   const v = $('video');
   v.ontimeupdate = time;
   v.onended = stop;
-  v.onplaying = () => playing && (playing.started = true);
+  v.onplaying = () => {
+    busy(false);
+    if (playing) playing.started = true;
+  };
+  // Buffering, or seeking: the spinner, once it has taken 0.3s.
+  v.onwaiting = v.onseeking = () => playing && busy(true);
+  v.onseeked = () => busy(false);
   v.onerror = () => {
     const p = playing;
     stop();

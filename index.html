@@ -230,6 +230,33 @@
     color: var(--subs-color, #fff); line-height: var(--subs-line, 1.6);
   }
 
+  /* A page or the video loading (busy() in app.js): the Mac's playback spinner at TV size, a ring
+     of the text colour turning in a dark disc, over the page and the player alike. Hidden, not
+     only clear, once it has faded out. */
+  #spinner {
+    position: fixed; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%;
+    background: rgba(0, 0, 0, .5); opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s, transform .4s;
+  }
+  #spinner.in { opacity: 1; visibility: visible; transition: opacity .3s, transform .4s; }
+  #spinner i {
+    position: absolute; top: 20px; left: 20px; width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%;
+    border: 5px solid rgba(255, 255, 255, .85); border-right-color: transparent; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* The first page after signing in, loading: the app's icon breathing in the screen's middle, as
+     the Mac's preloader, then crossfading into the page. The header and letters wait for it. The
+     breathing pauses once it's gone, so a hidden animation doesn't cost the TV frames. */
+  #preloader {
+    position: absolute; top: 50%; left: 50%; width: 192px; height: 192px; margin: -96px 0 0 -96px;
+    opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s;
+  }
+  #browse.launch #preloader { opacity: 1; visibility: visible; transition: none; }
+  #preloader img { display: block; width: 100%; height: 100%; animation: breathe 1s ease-in-out infinite alternate paused; }
+  #browse.launch #preloader img { animation-play-state: running; }
+  @keyframes breathe { from { opacity: .4; } to { opacity: 1; } }
+  header, #letters { transition: opacity .5s; }
+  #browse.launch header, #browse.launch #letters { opacity: 0; transition: none; }
+
   #flash {
     position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 12px 28px;
     border-radius: 12px; background: rgba(0, 0, 0, .7); opacity: 0; transition: opacity .3s;
@@ -422,6 +449,7 @@
     <header><img id="logo" src="logo.png" alt="Hotaru" hidden><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div></header>
     <div id="grid"></div>
     <div id="letters" hidden></div>
+    <div id="preloader"><img src="logo.png" alt=""></div>
     <aside id="settings"><nav id="settings-nav"></nav><div id="settings-page"></div></aside>
   </main>
 
@@ -431,6 +459,7 @@
     <div id="subs-line"><span id="subs" class="subs-box" hidden></span></div>
     <div id="flash"></div>
   </div>
+  <div id="spinner"><i></i></div>
   <div id="menu" hidden><div id="menu-art"></div><div id="menu-title" class="dim"></div><div id="menu-list"></div></div>
 
   <!-- Only for desktop browsers without native HLS; the TV plays HLS itself. -->
