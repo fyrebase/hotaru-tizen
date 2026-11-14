@@ -196,11 +196,11 @@
     background: linear-gradient(to right, rgba(0, 0, 0, .7), transparent 60%);
   }
   /* The poster as a card has it: lit edge, drop shadow and all (.art). */
-  #osd-art { flex: none; width: 140px; margin-right: 40px; }
+  #osd-art { flex: none; width: 280px; margin-right: 56px; }
   #osd-text { flex: 1; min-width: 0; }
   /* The title in a display face, Anton SC from Google Fonts, falling back to a heavy system face,
      set over lines by titleLines(): stacked tight, its lead-in half size. */
-  #osd-title { font: 96px/1 "Anton SC", Impact, sans-serif; letter-spacing: .01em; margin-bottom: 12px; }
+  #osd-title { font: 160px/1 "Anton SC", Impact, sans-serif; letter-spacing: .01em; margin-bottom: 12px; }
   #osd-title > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #osd-title .small { font-size: .5em; }
   /* The time, then the Mac's seek bar (slider() in its src/main.rs) at TV size: a faint track,
@@ -238,6 +238,9 @@
     background: rgba(0, 0, 0, .5); opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s, transform .4s;
   }
   #spinner.in { opacity: 1; visibility: visible; transition: opacity .3s, transform .4s; }
+  /* While the playing overlay is up (overlay() in app.js), top right, 80px in as the overlay's
+     own edges are, clear of its title, moving there as the overlay fades. */
+  #spinner.aside { transform: translate(calc(50vw - 128px), calc(128px - 50vh)); }
   #spinner i {
     position: absolute; top: 20px; left: 20px; width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%;
     border: 5px solid rgba(255, 255, 255, .85); border-right-color: transparent; animation: spin .8s linear infinite;

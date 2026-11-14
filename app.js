@@ -289,7 +289,8 @@ let seekTimer;
 // A title set as a poster sets it: a lead-in small on a line of its own, either everything up to
 // a colon ("Star Wars:") or a leading article ("The"), and the rest balanced over up to three
 // lines, never breaking after a little word like "of". Each line is { text, small }.
-// ponytail: LINE is characters per line by eye for Anton SC at 96px, about 770px; measure the text if titles crowd.
+// LINE is characters per line by eye for Anton SC at 160px, about 1290px of the 1424px beside
+// the poster; a line of wide letters that still overflows shrinks the title to fit (fitTitle()).
 const LITTLE = ['a', 'an', 'the', 'of', 'and', '&', 'in', 'on', 'to', 'for', 'at', 'or', 'by', 'with', 'from'];
 const LINE = 22;
 function titleLines(title) {
@@ -316,6 +317,20 @@ function titleLines(title) {
   return (lead ? [{ text: words.slice(0, lead).join(' '), small: true }] : []).concat(
     lines.map((l) => ({ text: l.join(' '), small: false }))
   );
+}
+
+// The overlay's title shrinks, all its lines together, until its widest fits rather than end in
+// "…". Measured once its face has loaded, as Anton SC comes from Google Fonts: loaded here, as
+// fonts.ready can settle before the title's first layout asks for it. Without the face, as on a
+// TV offline, it measures the fallback.
+function fitTitle() {
+  const t = $('osd-title');
+  t.style.fontSize = '';
+  const fit = () => {
+    const over = Math.max.apply(null, Array.from(t.children).map((d) => d.scrollWidth / (d.clientWidth || 1)));
+    if (over > 1) t.style.fontSize = Math.floor(parseFloat(getComputedStyle(t).fontSize) / over) + 'px';
+  };
+  document.fonts.load('160px "Anton SC"').then(fit, fit);
 }
 
 function el(tag, cls, text) {
@@ -912,6 +927,7 @@ function play(item, fromStart, viaPlex) {
   const t = $('osd-title');
   t.innerHTML = '';
   titleLines(h[0] || '').forEach((line) => t.append(el('div', line.small ? 'small' : '', line.text)));
+  fitTitle();
   $('osd-sub').textContent = h[1];
   // The show's poster for an episode, the film's for a film.
   const art = item.grandparentThumb || item.thumb;
@@ -963,6 +979,8 @@ function stop() {
   playing = null;
   busy(false);
   $('player').hidden = true;
+  clearTimeout(osdTimer);
+  overlay(false);
   $('browse').classList.remove('away');
   focusStill(from);
   $('subs').textContent = '';
@@ -1301,11 +1319,17 @@ function time() {
 
 function osd() {
   time();
-  $('osd').classList.add('in');
+  overlay(true);
   clearTimeout(osdTimer);
   // Paused, it stays as long as Settings says, to read; playing, it gets out of the way.
   const secs = $('video').paused ? prefValue(prefOf('pausedOverlay')) : 3;
-  osdTimer = setTimeout(() => $('osd').classList.remove('in'), secs * 1000);
+  osdTimer = setTimeout(() => overlay(false), secs * 1000);
+}
+
+// The playing overlay, and the spinner moved top right while it's up, clear of the title.
+function overlay(on) {
+  $('osd').classList.toggle('in', on);
+  $('spinner').classList.toggle('aside', on);
 }
 
 function playerKey(k) {
