@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT, ADDED } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -188,5 +188,17 @@ assert.equal(set('Mission: Impossible'), 'mission: / Impossible');
 assert.equal(set('Ash vs Evil Dead:'), 'Ash vs Evil Dead:');
 assert.equal(set('The Lord of the Rings: The Return of the King'), 'the lord of the rings: / The Return of the King');
 assert.equal(set('Everything Everywhere All at Once'), 'Everything Everywhere / All at Once');
+
+// Watched: a film or episode once played through, a show or season once all its episodes are.
+assert.ok(!watched({ viewCount: 0 }) && watched({ viewCount: 2 }));
+assert.ok(!watched({ leafCount: 12, viewedLeafCount: 5 }) && watched({ leafCount: 12, viewedLeafCount: 12 }));
+assert.ok(!watched({ leafCount: 0 }));
+assert.ok(canMarkWatched({ ratingKey: '1', leafCount: 3 }) && canMarkWatched(item('mp4', 'h264', 'aac')));
+assert.ok(!canMarkWatched({ key: '/library/sections/1/all' }) && !canMarkWatched({ ratingKey: '1' }));
+const season = { leafCount: 12, viewedLeafCount: 5, viewOffset: 900 };
+setWatched(season, true);
+assert.ok(watched(season) && season.viewOffset === 0);
+setWatched(season, false);
+assert.equal(season.viewedLeafCount, 0);
 
 console.log('ok');

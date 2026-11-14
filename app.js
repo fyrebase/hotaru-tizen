@@ -107,6 +107,8 @@ const ICONS = {
   rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
   calendarPlus: lucide('<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/>'),
   check: lucide('<path d="M20 6 9 17l-5-5"/>'),
+  eye: lucide('<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>'),
+  eyeClosed: lucide('<path d="m15 18-.722-3.25"/><path d="M2 8a10.645 10.645 0 0 0 20 0"/><path d="m20 15-1.726-2.05"/><path d="m4 15 1.726-2.05"/><path d="m9 18 .722-3.25"/>'),
   settings2: lucide('<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'),
   captions: lucide('<rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/>'),
   server: lucide('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/>')
@@ -121,6 +123,22 @@ function episodes(a) {
   if (n == null) return '';
   const w = a.viewedLeafCount || 0;
   return w === 0 || w >= n ? plural(n, 'episode') : w + ' of ' + n + ' watched';
+}
+
+// Watched to the end; a show or season when every episode is (Item::watched in the Mac app).
+function watched(a) {
+  return a.leafCount != null ? a.leafCount > 0 && (a.viewedLeafCount || 0) >= a.leafCount : (a.viewCount || 0) > 0;
+}
+
+// Episodes and movies, and the shows and seasons holding them; not libraries or folders.
+const canMarkWatched = (a) => !!a.ratingKey && (a.leafCount != null || !!a.Media);
+
+// Mirrors on the item what scrobbling does on the server, so its menu and resume point follow at
+// once; a show or season marks all its episodes.
+function setWatched(a, on) {
+  if (a.leafCount != null) a.viewedLeafCount = on ? a.leafCount : 0;
+  else a.viewCount = on ? 1 : 0;
+  a.viewOffset = 0;
 }
 
 // The facts line on a page: "2021 · TV-14 · 2 seasons · ★ 8.1 · Animation, Action".
@@ -384,6 +402,11 @@ function render(page) {
     const text = label(item);
     card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
     card.onclick = () => open(item);
+    if (canMarkWatched(item)) {
+      card.append(el('i', 'corner'));
+      drawEye(card, item);
+      card.hold = () => cardMenu(item, card);
+    }
     if (indexed && item.ratingKey) {
       card.dataset.letter = letterOf(item);
       card.dataset.find = fold(item.title + ' ' + (item.originalTitle || ''));
@@ -726,6 +749,7 @@ function stop() {
   $('subs').textContent = '';
   $('subs').hidden = true;
   $('menu').hidden = true;
+  menuFocus = null;
   // A movie's page offers Resume or Play by where it was left.
   const top = stack[stack.length - 1];
   if (top && top.data && top.data.about === it) {
@@ -873,6 +897,40 @@ function drawSubtitles(p) {
   requestAnimationFrame(() => drawSubtitles(p));
 }
 
+// The Mac app's eye in a card's corner, shown on the focused card as the Mac shows it under the
+// pointer: open and green when watched, closed and dim when not.
+function drawEye(card, item) {
+  const eye = card.querySelector('.corner');
+  const on = watched(item);
+  eye.className = on ? 'corner on' : 'corner';
+  eye.innerHTML = ICONS[on ? 'eye' : 'eyeClosed'];
+}
+
+// OK held on a card: what to do with its item. The row's eye shows what picking it turns it to.
+function cardMenu(item, card) {
+  const on = !watched(item);
+  const row = { text: on ? 'Mark as Watched' : 'Mark as Unwatched', icon: on ? 'eye' : 'eyeClosed' };
+  row.pick = () => markWatched(item, on, card);
+  showMenu(label(item)[0], [row]);
+}
+
+// Shown at once; if Plex refuses, the page reloads to show what it has.
+function markWatched(item, on, card) {
+  closeMenu();
+  setWatched(item, on);
+  drawEye(card, item);
+  const href = url('/:/' + (on ? 'scrobble' : 'unscrobble'), { identifier: 'com.plexapp.plugins.library', key: item.ratingKey });
+  fetch(href)
+    .then((r) => {
+      if (!r.ok) throw new Error('Plex answered ' + r.status);
+    })
+    .catch((e) => {
+      const top = stack[stack.length - 1];
+      top.at = focusables().indexOf(document.activeElement);
+      show(top).then(() => status("Couldn't mark it: " + e.message));
+    });
+}
+
 // Up (S on a keyboard): Off, the item's subtitle tracks, and a search of OpenSubtitles, over the
 // picture as it plays, the track showing checked and focused.
 function subtitleMenu() {
@@ -881,24 +939,27 @@ function subtitleMenu() {
   const rows = [{ text: 'Off', on: p.track < 0, pick: () => setTrack(-1) }]
     .concat(p.tracks.map((t, i) => ({ text: t.title, on: p.track === i, pick: () => setTrack(i) })))
     .concat([{ text: 'Find on OpenSubtitles…', pick: findSubtitles }]);
-  showMenu(rows, p.track + 1);
+  showMenu('Subtitles', rows, p.track + 1);
 }
 
-// The menu's rows: { text, sub, on, pick }, or a line of text alone without `pick`.
-function showMenu(rows, focus) {
+// The menu's rows: { text, sub, on, icon, pick }, or a line of text alone without `pick`.
+let menuFocus = null;
+function showMenu(title, rows, focus) {
+  $('menu-title').textContent = title;
   const list = $('menu-list');
   list.innerHTML = '';
   rows.forEach((r) => {
     if (!r.pick) return list.append(el('div', 'dim note', r.text));
-    const b = el('button', r.on ? 'on' : '');
-    b.innerHTML = ICONS.check;
+    // A row's own icon shows always, the eye green open; the check only on the row that's on.
+    const b = el('button', (r.on ? 'on' : '') + (r.icon ? ' icon' : '') + (r.icon === 'eye' ? ' green' : ''));
+    b.innerHTML = ICONS[r.icon || 'check'];
     b.append(r.text);
     if (r.sub) b.append(el('span', 'dim sub', r.sub));
     b.onclick = r.pick;
     list.append(b);
   });
   // Where focus was in the page, to hand it back on closing.
-  playing.focus = playing.focus || document.activeElement;
+  menuFocus = menuFocus || document.activeElement;
   $('menu').hidden = false;
   const buttons = list.querySelectorAll('button');
   if (buttons.length) (buttons[focus] || buttons[0]).focus();
@@ -909,20 +970,20 @@ function showMenu(rows, focus) {
 function findSubtitles() {
   const p = playing;
   const open = () => playing === p && !$('menu').hidden;
-  showMenu([{ text: 'Searching OpenSubtitles…' }]);
+  showMenu('Subtitles', [{ text: 'Searching OpenSubtitles…' }]);
   searchSubtitles(p.item, language()).then(
     (found) => {
       if (!open()) return;
-      if (!found.length) return showMenu([{ text: 'Nothing found on OpenSubtitles' }]);
+      if (!found.length) return showMenu('Subtitles', [{ text: 'Nothing found on OpenSubtitles' }]);
       const rows = found.map((f) => ({
         text: f.displayTitle || 'Subtitles',
         // The release it was made for: "Shelter.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo".
         sub: (f.perfectMatch ? 'Exact match · ' : '') + (f.title || ''),
         pick: () => pickFound(p, f)
       }));
-      showMenu(rows);
+      showMenu('Subtitles', rows);
     },
-    (e) => open() && showMenu([{ text: "Couldn't search: " + e.message }])
+    (e) => open() && showMenu('Subtitles', [{ text: "Couldn't search: " + e.message }])
   );
 }
 
@@ -943,7 +1004,8 @@ function pickFound(p, found) {
 
 function closeMenu() {
   $('menu').hidden = true;
-  if (playing && playing.focus) playing.focus.focus({ preventScroll: true });
+  if (menuFocus) menuFocus.focus({ preventScroll: true });
+  menuFocus = null;
 }
 
 // Up and Down move through the list, OK picks, Back or S closes it; playback carries on.
@@ -1299,9 +1361,23 @@ const KEYS = {
   10252: 'playpause', 32: 'playpause', 415: 'play', 19: 'pause', 413: 'stop', 412: 'rew', 417: 'ff', 83: 'subs'
 };
 
+// OK held on a card for half a second opens its menu; let go sooner and the card opens as ever.
+// `hold`: the timer while OK is down, then true once the menu is up, until OK comes up. Repeats
+// of OK in between go nowhere, so holding it doesn't pick the menu's first row.
+let hold = null;
+function onKeyUp(e) {
+  if (KEYS[e.keyCode] !== 'enter' || !hold) return;
+  if (hold !== true) {
+    clearTimeout(hold);
+    document.activeElement.click();
+  }
+  hold = null;
+}
+
 function onKey(e) {
   const k = KEYS[e.keyCode];
   if (!k) return;
+  if (k === 'enter' && hold) return e.preventDefault();
   if (playing) {
     e.preventDefault();
     return playerKey(k);
@@ -1319,6 +1395,10 @@ function onKey(e) {
     }
     return;
   }
+  if (!$('menu').hidden) {
+    e.preventDefault();
+    return menuKey(k);
+  }
   if ($('settings').classList.contains('in')) {
     e.preventDefault();
     return settingsKey(k);
@@ -1332,7 +1412,16 @@ function onKey(e) {
     }
     return;
   }
-  if (k === 'enter') return; // the focused card's own click
+  if (k === 'enter') {
+    const b = document.activeElement;
+    if (!b.hold) return; // the focused button's own click
+    e.preventDefault();
+    hold = setTimeout(() => {
+      hold = true;
+      b.hold();
+    }, 500);
+    return;
+  }
   e.preventDefault();
   if (k === 'back') return back();
   if (k === 'left' || k === 'right' || k === 'up' || k === 'down') move(k);
@@ -1346,6 +1435,7 @@ function boot() {
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
   subtitleStyle();
   document.addEventListener('keydown', onKey);
+  document.addEventListener('keyup', onKeyUp);
   $('grid').addEventListener('focusin', lightLetter);
   $('search').addEventListener('input', filter);
   $('backdrop').onload = () => $('backdrop').classList.add('in');
@@ -1367,4 +1457,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT, ADDED };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, RECENT, ADDED };
