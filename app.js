@@ -399,12 +399,16 @@ function theme(path) {
 function aboutBlock(a) {
   const movie = a.type === 'movie';
   const box = el('div', 'about');
+  // The poster as a card has it: lit edge, drop shadow and all (.art).
   if (movie && a.thumb) {
     const img = new Image();
-    img.className = 'about-poster';
     img.onload = () => img.classList.add('in');
     img.src = poster(a.thumb);
-    box.append(img);
+    const art = el('div', 'art');
+    art.append(img);
+    const frame = el('div', 'about-poster');
+    frame.append(art);
+    box.append(frame);
   }
   const text = el('div', 'about-text');
   const lines = [

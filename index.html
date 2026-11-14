@@ -88,15 +88,33 @@
   .art {
     position: relative; height: 0; padding-bottom: 150%; border-radius: 8px; overflow: hidden;
     background: #1a1a1c; transition: box-shadow .15s;
+    /* Lifted off the page: a soft shadow below, kept under the focus ring. */
+    box-shadow: 0 20px 44px rgba(0, 0, 0, .9), 0 4px 10px rgba(0, 0, 0, .7);
   }
   .card.wide .art { padding-bottom: 56.25%; }
-  .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
+  .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85), 0 20px 44px rgba(0, 0, 0, .9), 0 4px 10px rgba(0, 0, 0, .7); }
   .art svg { position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; color: rgba(255, 255, 255, .45); }
   .art img {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
     opacity: 0; transition: opacity .5s;
   }
   .art img.in { opacity: 1; }
+  /* A lit edge over the art, as on a raised key: a rim along the top that runs down the sides,
+     fading out halfway, and a short glow inside the top. Both are overlaid, so they brighten the
+     picture's own colours rather than laying grey over them. The rim is a gradient border cut out
+     of a box by masking away its inside (xor: no mask-composite: exclude in Chromium 56). */
+  .art::before, .art::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+    border-radius: inherit; pointer-events: none; mix-blend-mode: overlay;
+  }
+  .art::before { background: linear-gradient(rgba(255, 255, 255, .25), rgba(255, 255, 255, 0) 15%); }
+  .art::after {
+    box-sizing: border-box; border: 2px solid transparent;
+    background: linear-gradient(rgba(255, 255, 255, .8), rgba(255, 255, 255, 0) 50%) border-box;
+    -webkit-mask: linear-gradient(#000, #000) padding-box, linear-gradient(#000, #000);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
   .card span { display: block; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The detail wraps to four lines at most, and always takes all four, so every card in a grid
      is the same height. -webkit-box is the line clamp Chromium 56 knows. */
@@ -182,11 +200,7 @@
   .about { flex: 0 0 calc(100% - 32px); display: flex; align-items: flex-start; margin: 16px 16px 40px; }
   .season-head { flex: 0 0 calc(100% - 32px); margin: 80px 16px 0; font-size: 32px; }
   .about + .season-head { margin-top: 32px; }
-  .about-poster {
-    flex: none; width: 300px; height: 450px; margin-right: 48px; border-radius: 8px; object-fit: cover;
-    background: #1a1a1c; opacity: 0; transition: opacity .5s;
-  }
-  .about-poster.in { opacity: 1; }
+  .about-poster { flex: none; width: 300px; margin-right: 48px; }
   .about-text { max-width: 1100px; }
   .about-text > div { margin-bottom: 16px; }
   .tagline { font-style: italic; }
