@@ -214,7 +214,8 @@ async function sections() {
   );
 }
 
-const poster = (thumb) => url('/photo/:/transcode', { width: 480, height: 720, minSize: 1, url: thumb });
+// 320 wide: a card is 288px at 1920, 305 focused, and every other poster shows smaller.
+const poster = (thumb) => url('/photo/:/transcode', { width: 320, height: 480, minSize: 1, url: thumb });
 const still = (thumb) => url('/photo/:/transcode', { width: 640, height: 360, minSize: 1, url: thumb });
 
 // The codecs parameter `canPlayType` takes for Plex's codec names. HEVC is asked for at level
@@ -494,9 +495,38 @@ function backdrop(art) {
   else img.removeAttribute('src');
 }
 
+// A card's art loads once the card comes within a screen of view, and unloads once it's three
+// screens away, so the TV holds a few screens of art however far a library is browsed. Chromium
+// 56 ignores img.loading (Chrome 76 has it), so a library of 1,500 films asked Plex for every
+// poster at once, and the TV decoded them all, about 1.4 MB each, while the D-pad moved. The
+// gap between the two keeps a card at the edge from loading and unloading as the page moves.
+// Cast photos, a row of a few dozen, load at once.
+let nearView, farView;
+function later(img, src) {
+  if (!window.IntersectionObserver) return void (img.src = src);
+  if (!nearView) {
+    // intersectionRatio, as Chromium 56 has no isIntersecting (Chrome 58 has it).
+    const watch = (margin, seen) =>
+      new IntersectionObserver((entries) => entries.forEach((e) => seen(e.target, e.intersectionRatio > 0)), { root: $('grid'), rootMargin: margin });
+    nearView = watch('100% 0px', (img, near) => {
+      if (near && !img.getAttribute('src')) img.src = img.dataset.src;
+    });
+    farView = watch('300% 0px', (img, near) => {
+      if (near || !img.getAttribute('src')) return;
+      img.removeAttribute('src');
+      // So it fades in again when it's back.
+      img.classList.remove('in');
+    });
+  }
+  img.dataset.src = src;
+  nearView.observe(img);
+  farView.observe(img);
+}
+
 function render(page) {
   const grid = $('grid');
   const d = page.data;
+  if (nearView) [nearView, farView].forEach((o) => o.disconnect());
   grid.innerHTML = '';
   // A person's page has no title, search or seasons to head it, so it starts at the screen's top.
   $('browse').classList.toggle('headless', !!d.person);
@@ -526,9 +556,8 @@ function render(page) {
     const wide = d.about && item.type === 'episode';
     const card = el('button', wide ? 'card wide' : 'card');
     const img = new Image();
-    img.loading = 'lazy';
     img.onload = () => img.classList.add('in');
-    if (item.thumb) img.src = wide ? still(item.thumb) : poster(item.thumb);
+    if (item.thumb) later(img, wide ? still(item.thumb) : poster(item.thumb));
     const art = el('div', 'art');
     if (item.icon) art.innerHTML = ICONS[item.icon];
     else art.append(img);
@@ -659,7 +688,6 @@ function face(r, cls) {
   const box = el('div', cls, r.thumb ? '' : initials);
   if (r.thumb) {
     const img = new Image();
-    img.loading = 'lazy';
     img.onload = () => img.classList.add('in');
     // Sized for the person's page; the row's smaller circles share the one download.
     img.src = url('/photo/:/transcode', { width: 600, height: 600, minSize: 1, url: r.thumb });
@@ -1742,6 +1770,7 @@ function onKey(e) {
   if (k === 'back') return back();
   if (k === 'left' || k === 'right' || k === 'up' || k === 'down') move(k);
 }
+
 
 // The time of day in the header and the playing overlay, in the TV's own format: "9:41 PM" or
 // "21:41". Checked each second, so it turns over with the minute.
