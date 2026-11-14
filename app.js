@@ -1369,6 +1369,12 @@ function playerKey(k) {
   // The subtitle list takes the D-pad, OK and Back for itself, so Back closes the list rather
   // than the video; the media keys still work the player.
   if (!$('menu').hidden && ['up', 'down', 'left', 'right', 'enter', 'back', 'subs'].includes(k)) return menuKey(k);
+  // Back puts the overlay away first, and leaves the video only from the bare picture; Stop
+  // always leaves it.
+  if (k === 'back' && $('osd').classList.contains('in')) {
+    clearTimeout(osdTimer);
+    return overlay(false);
+  }
   if (k === 'back' || k === 'stop') return stop();
   if (k === 'up' || k === 'subs') return subtitleMenu();
   if (k === 'enter' || k === 'playpause') v.paused ? v.play() : v.pause();
