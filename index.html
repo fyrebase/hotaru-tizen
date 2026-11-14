@@ -55,12 +55,13 @@
      (#browse.pushed), so the fades blinked out and back.
      ponytail: fixed edge fades; fade them by scroll position if they hide too much. */
   #browse::before, #browse::after {
-    content: ''; position: absolute; left: 0; right: 12px; height: 40px; z-index: 1; pointer-events: none;
+    content: ''; position: absolute; left: 0; right: 6px; height: 40px; z-index: 1; pointer-events: none;
   }
   #browse::before { top: 120px; background: linear-gradient(rgba(20, 20, 22, .85), rgba(20, 20, 22, 0)); }
   #browse::after { bottom: 0; background: linear-gradient(rgba(20, 20, 22, 0), rgba(20, 20, 22, .85)); }
-  #grid::-webkit-scrollbar { width: 12px; }
-  #grid::-webkit-scrollbar-thumb { border-radius: 6px; background: rgba(255, 255, 255, .3); }
+  /* Every scrollbar, the grid's, a menu's and Settings': a thin pale thumb on no track. */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { border-radius: 3px; background: rgba(255, 255, 255, .3); }
   #grid.in { opacity: 1; }
   #grid.indexed { right: 72px; }
 
