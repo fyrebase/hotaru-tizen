@@ -192,9 +192,12 @@
      along the bottom, each over its own shade so the rest of the picture stays clear. */
   #osd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0; transition: opacity .4s; }
   #osd.in { opacity: 1; }
+  /* Scrubbing (osd() in app.js): the seek bar alone, the title and poster faded away. */
+  #osd.scrub #osd-head { opacity: 0; }
   #osd-head {
     position: absolute; top: 0; bottom: 0; left: 0; right: 0; padding: 0 80px; display: flex; align-items: center;
     background: linear-gradient(to right, rgba(0, 0, 0, .7), transparent 60%);
+    transition: opacity .4s;
   }
   /* The poster as a card has it: lit edge, drop shadow and all (.art). */
   #osd-art { flex: none; width: 280px; margin-right: 56px; }
@@ -239,8 +242,8 @@
     background: rgba(0, 0, 0, .5); opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s, transform .4s;
   }
   #spinner.in { opacity: 1; visibility: visible; transition: opacity .3s, transform .4s; }
-  /* While the playing overlay is up (overlay() in app.js), top right, 80px in as the overlay's
-     own edges are, clear of its title, moving there as the overlay fades. */
+  /* While the playing overlay's title is up (overlay() in app.js), top right, 80px in as the
+     overlay's own edges are, clear of the title, moving there as the overlay fades. */
   #spinner.aside { transform: translate(calc(50vw - 128px), calc(128px - 50vh)); }
   #spinner i {
     position: absolute; top: 20px; left: 20px; width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%;

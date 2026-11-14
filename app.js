@@ -1349,19 +1349,22 @@ function time() {
   $('scrub-knob').style.left = done;
 }
 
-function osd() {
+// `scrub`: Left, Right, Rew or FF pressed, which shows the seek bar alone, without the title and
+// poster; any other key brings them back.
+function osd(scrub) {
   time();
-  overlay(true);
+  overlay(true, !scrub);
+  $('osd').classList.toggle('scrub', !!scrub);
   clearTimeout(osdTimer);
   // Paused, it stays as long as Settings says, to read; playing, it gets out of the way.
   const secs = $('video').paused ? prefValue(prefOf('pausedOverlay')) : 3;
   osdTimer = setTimeout(() => overlay(false), secs * 1000);
 }
 
-// The playing overlay, and the spinner moved top right while it's up, clear of the title.
-function overlay(on) {
+// The playing overlay, and the spinner moved top right while its title is up, clear of it.
+function overlay(on, titled) {
   $('osd').classList.toggle('in', on);
-  $('spinner').classList.toggle('aside', on);
+  $('spinner').classList.toggle('aside', on && !!titled);
 }
 
 function playerKey(k) {
@@ -1391,7 +1394,7 @@ function playerKey(k) {
       seekTo = null;
     }, 600);
   }
-  osd();
+  osd(jump);
 }
 
 // The sign-in screen: a message, the code if any, and buttons to choose from, the first focused.
