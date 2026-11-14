@@ -625,6 +625,7 @@ let homeArts = {};
 function homeArt(e) {
   const card = e.target;
   if (!$('browse').classList.contains('home') || !card.item || !card.item.key) return;
+  if (!prefValue(prefOf('homeArt'))) return backdrop(null);
   // A film or episode in Continue Watching has its own art, an episode its show's.
   if (card.item.ratingKey) return backdrop(card.item.grandparentArt || card.item.art);
   const path = card.item.key;
@@ -1709,8 +1710,11 @@ const CARD_PREFS = [
 ];
 const PLAYER_PREFS = [
   { name: 'pausedOverlay', label: 'Overlay when paused', detail: 'How long the title and seek bar stay up after pausing.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
+const HOME_PREFS = [
+  { name: 'homeArt', label: 'Background art', detail: 'Art from the focused library or show behind the home page.', def: 1, min: 0, max: 1, toggle: true }
 ];
-const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS, PLAYER_PREFS).filter((p) => p.name === name)[0];
+];
+const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS, HOME_PREFS, PLAYER_PREFS).filter((p) => p.name === name)[0];
 
 function prefValue(p) {
   const saved = localStorage.getItem(p.name);
@@ -1787,7 +1791,7 @@ const focusFirst = (box) => {
   if (b) b.focus();
 };
 
-// The card effects under one heading, which says once what they all cost.
+// The card effects under one heading, which says once what they all cost, then the home page's.
 function generalPage(page) {
   const head = el('div', 'group');
   head.append(el('div', '', 'Card effects'), el('div', 'dim', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.'));
@@ -1795,6 +1799,11 @@ function generalPage(page) {
   prefRows(page, CARD_PREFS);
 }
 // The Mac's: a sample over a stand-in for a bright picture, then the settings.
+  const home = el('div', 'group');
+  home.style.paddingTop = '32px';
+  home.append(el('div', '', 'Home'));
+  page.append(home);
+  prefRows(page, HOME_PREFS);
 function subtitlesPage(page) {
   const sample = el('div', 'sample');
   sample.append(el('span', 'subs-box', 'Subtitles will look like this,\nover one line or two.'));
