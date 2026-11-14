@@ -1307,7 +1307,15 @@ function cardMenu(item, card) {
   const on = !watched(item);
   const row = { text: on ? 'Mark as Watched' : 'Mark as Unwatched', icon: on ? 'eye' : 'eyeClosed' };
   row.pick = () => markWatched(item, on, card);
-  showMenu(label(item)[0], [row]);
+  const rows = [row];
+  // A film or episode left partway can also start over, where OK resumes it or opens its page.
+  if (item.Media && item.viewOffset > 0) {
+    rows.unshift({ text: 'Play from Start', icon: 'rotateCcw', pick: () => {
+      closeMenu();
+      play(item, true);
+    } });
+  }
+  showMenu(label(item)[0], rows);
   // Over the page dimmed, under the card's own art: a copy, already loaded, so no fade.
   const art = card.querySelector('.art').cloneNode(true);
   Array.from(art.querySelectorAll('.glint')).forEach((g) => g.remove());
