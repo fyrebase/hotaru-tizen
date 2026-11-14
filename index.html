@@ -30,9 +30,18 @@
     padding: 40px 64px; display: flex; flex-wrap: wrap; align-content: flex-start;
     opacity: 0; transition: opacity .5s;
     /* ponytail: fixed edge fades; fade them by scroll position if they hide too much. */
-    -webkit-mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
-    mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
+    /* The second layer keeps the scrollbar's column clear of the fade. */
+    -webkit-mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent), linear-gradient(#000, #000);
+    mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent), linear-gradient(#000, #000);
+    -webkit-mask-size: 100% 100%, 12px 100%;
+    mask-size: 100% 100%, 12px 100%;
+    -webkit-mask-position: 0 0, 100% 0;
+    mask-position: 0 0, 100% 0;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
   }
+  #grid::-webkit-scrollbar { width: 12px; }
+  #grid::-webkit-scrollbar-thumb { border-radius: 6px; background: rgba(255, 255, 255, .3); }
   #grid.in { opacity: 1; }
   #grid.indexed { right: 72px; }
 
