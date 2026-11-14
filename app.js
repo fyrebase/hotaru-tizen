@@ -474,12 +474,9 @@ function render(page) {
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
   // A page opens on its first card, or with none, a movie's Play; Back returns to where it was.
   const first = page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0];
-  // A person's page opens at its top, bio first, wherever its first film is. Chromium 56 ignores
-  // preventScroll, so the scroll focusing it makes is undone.
-  if (d.person && !(page.at >= 0)) {
-    if (first) first.focus({ preventScroll: true });
-    grid.scrollTop = 0;
-  } else focusCard(first);
+  // A person's page opens at its top, bio first, wherever its first film is.
+  if (d.person && !(page.at >= 0)) focusStill(first);
+  else focusCard(first);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
 
@@ -667,9 +664,22 @@ const focusables = () =>
 // So the top row shows the page from its top, details and all, unless details as long as a
 // person's bio push it below the screen; anything lower centres in view. The letter strip
 // doesn't scroll, so its letters only take focus.
+// Focus without scrolling. Chromium 56 ignores focus()'s preventScroll (Chrome 64 has it), so
+// whatever focusing scrolls, the page or the cast's row, is put back as it was.
+function focusStill(b) {
+  if (!b) return;
+  const kept = [];
+  for (let e = b.parentNode; e && e.nodeType === 1; e = e.parentNode) kept.push([e, e.scrollTop, e.scrollLeft]);
+  b.focus({ preventScroll: true });
+  kept.forEach((k) => {
+    if (k[0].scrollTop !== k[1]) k[0].scrollTop = k[1];
+    if (k[0].scrollLeft !== k[2]) k[0].scrollLeft = k[2];
+  });
+}
+
 function focusCard(card) {
   if (!card) return;
-  card.focus({ preventScroll: true });
+  focusStill(card);
   if (!$('grid').contains(card)) return;
   // Along the cast's row, the one focused stays 80px clear of the screen's edges, as the row's
   // ends are (.cast in index.html).
@@ -867,7 +877,7 @@ function stop() {
   playing = null;
   $('player').hidden = true;
   $('browse').classList.remove('away');
-  if (from) from.focus({ preventScroll: true });
+  focusStill(from);
   $('subs').textContent = '';
   $('subs').hidden = true;
   $('menu').hidden = true;
@@ -1138,7 +1148,7 @@ function pickFound(p, found) {
 function closeMenu() {
   $('menu').hidden = true;
   $('browse').classList.remove('pushed');
-  if (menuFocus) menuFocus.focus({ preventScroll: true });
+  focusStill(menuFocus);
   menuFocus = null;
 }
 
@@ -1329,7 +1339,7 @@ function openSettings() {
 
 function closeSettings() {
   $('settings').classList.remove('in');
-  if (settingsFrom) settingsFrom.focus({ preventScroll: true });
+  focusStill(settingsFrom);
   settingsFrom = null;
 }
 
