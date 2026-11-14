@@ -334,14 +334,21 @@ const status = (text) => {
 async function load(path) {
   const id = /^\/library\/metadata\/(\d+)(\/.*)?$/.exec(path);
   if (!id) return { items: await list(path) };
-  if (!id[2]) return { items: [], about: (await list(path))[0] };
+  if (!id[2]) {
+    const item = (await list(path))[0];
+    return { items: [], about: item, cast: item && item.Role ? item : null };
+  }
   // A show's seasons, a season's episodes, or all a show's episodes: the listing has a line of
   // summary at most, so fetch the item it lists too.
   const both = await Promise.all([list(path), list('/library/metadata/' + id[1])]);
   const about = both[1][0];
-  // A season's page also lists its show's seasons, to switch between them.
-  const seasons = about.type === 'season' && (await list('/library/metadata/' + about.parentRatingKey + '/children').catch(() => []));
-  return { items: both[0], about: about, seasons: seasons && seasons.filter((s) => s.type === 'season') };
+  // A season's page also lists its show's seasons, to switch between them, and its show's cast,
+  // which Plex keeps on the show.
+  const parent = about.type === 'season' && '/library/metadata/' + about.parentRatingKey;
+  const more = parent && (await Promise.all([list(parent + '/children').catch(() => []), about.Role ? [] : list(parent).catch(() => [])]));
+  const show = more && more[1][0];
+  const cast = about.Role ? about : show && show.Role ? show : null;
+  return { items: both[0], about: about, cast: cast, seasons: more && more[0].filter((s) => s.type === 'season') };
 }
 
 // A person's page: their bio from Plex's online metadata, over their films in the library the
@@ -427,7 +434,6 @@ function render(page) {
   theme(d.about && (d.about.theme || d.about.parentTheme));
   seasonTabs(d.seasons && d.seasons.length > 1 && d.seasons, d.about);
   if (d.about) grid.append(aboutBlock(d.about));
-  if (d.about && d.about.type === 'movie' && d.about.Role) grid.append(el('div', 'season-head', 'Cast'), castBlock(d.about));
   if (d.person) grid.append(personBlock(d.person));
   if (d.person && d.items.length) grid.append(el('div', 'season-head films-head', 'In your library'));
   // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
@@ -469,6 +475,9 @@ function render(page) {
     }
     grid.append(card);
   });
+  // The cast after what the page lists, a show's seasons or a season's episodes; a movie's page
+  // lists nothing, so its cast follows its details.
+  if (d.cast) grid.append(el('div', 'season-head', 'Cast'), castBlock(d.cast));
   if (indexed) filter();
   else letters(false);
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
@@ -692,12 +701,20 @@ function focusCard(card) {
   }
   const grid = $('grid');
   const r = card.getBoundingClientRect();
+  const g = grid.getBoundingClientRect();
   // Where the card's foot would be with the page at its top.
-  const footAtTop = r.bottom - grid.getBoundingClientRect().top + grid.scrollTop;
+  const footAtTop = r.bottom - g.top + grid.scrollTop;
   if (footAtTop > grid.clientHeight || shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= r.top)) {
-    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  } else if (grid.scrollTo) grid.scrollTo({ top: 0, behavior: 'smooth' });
-  else grid.scrollTop = 0; // Chromium 56 has no Element.scrollTo
+    scrollGrid(grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2));
+  } else scrollGrid(0);
+}
+
+// Scrolls the page to `top`, smoothly where the browser can. Worked out here, not by
+// scrollIntoView({ block: 'center' }): Chromium 56 has neither 'center' nor Element.scrollTo.
+function scrollGrid(top) {
+  const grid = $('grid');
+  if (grid.scrollTo) grid.scrollTo({ top: top, behavior: 'smooth' });
+  else grid.scrollTop = top;
 }
 
 function open(item) {
@@ -734,20 +751,25 @@ function move(dir) {
   const all = focusables();
   const cur = document.activeElement;
   if (all.indexOf(cur) < 0) return focusCard(all[0]);
-  // A person's bio: Up and Down scroll it a few lines at a time, and move on past its ends.
+  // Details too long for the screen, a person's bio, have nothing to focus, so Up and Down read
+  // through them a step at a time: Down while the focused card is still below the screen, Up
+  // from the top row. Each step keeps a fifth of the last screenful in view.
+  const grid = $('grid');
+  const step = 0.8 * grid.clientHeight;
+  if (dir === 'down' && grid.contains(cur)) {
+    const r = cur.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    // No further than centres the card, where moving on to it would scroll anyway.
+    const centred = grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2);
+    if (r.bottom > g.bottom) return scrollGrid(Math.min(grid.scrollTop + step, centred));
+  }
   // Up and Down keep to the side focus is on, the strip or the page; Left and Right cross.
   const strip = $('letters');
   const side = (b) => dir === 'left' || dir === 'right' || strip.contains(b) === strip.contains(cur);
   const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
   const to = nearest(cur.getBoundingClientRect(), others, dir);
   if (!to && dir === 'left') return openSettings();
-  // Up from the top row, with details too long to show beside it (a person's bio), shows them.
-  if (!to && dir === 'up' && $('grid').contains(cur)) {
-    const grid = $('grid');
-    if (grid.scrollTo) grid.scrollTo({ top: 0, behavior: 'smooth' });
-    else grid.scrollTop = 0; // Chromium 56 has no Element.scrollTo
-    return;
-  }
+  if (!to && dir === 'up' && grid.contains(cur)) return scrollGrid(Math.max(0, grid.scrollTop - step));
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
   const target = to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to;
