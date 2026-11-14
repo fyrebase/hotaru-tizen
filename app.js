@@ -441,6 +441,8 @@ function lifeLine(bio) {
 
 async function show(page) {
   $('logo').hidden = page !== stack[0];
+  if (page !== stack[0]) homeArts = {};
+  $('browse').classList.toggle('home', page === stack[0]);
   // A person's name heads their bio instead (personBlock()).
   $('title').textContent = page.person ? '' : page.title;
   status('');
@@ -448,7 +450,7 @@ async function show(page) {
   backdrop(null);
   busy(true);
   try {
-    page.data = page.person ? await loadPerson(page) : page.key ? await load(page.key) : { items: await sections() };
+    page.data = page.person ? await loadPerson(page) : page.key ? await load(page.key) : await home();
   } catch (e) {
     await busy(false);
     return status(e.message);
@@ -523,6 +525,89 @@ function later(img, src) {
   farView.observe(img);
 }
 
+// A card for `item`: its poster, or with `wide` its 16:9 still, its title and a line under it.
+function cardFor(item, wide) {
+  const card = el('button', wide ? 'card wide' : 'card');
+  const img = new Image();
+  img.onload = () => img.classList.add('in');
+  if (item.thumb) later(img, wide ? still(item.thumb) : poster(item.thumb));
+  const art = el('div', 'art');
+  if (item.icon) art.innerHTML = ICONS[item.icon];
+  else art.append(img);
+  const text = label(item);
+  card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
+  card.onclick = () => open(item);
+  card.item = item;
+  if (canMarkWatched(item)) {
+    card.append(el('i', 'corner'));
+    drawEye(card, item);
+    card.hold = () => cardMenu(item, card);
+  }
+  return card;
+}
+
+// The home page: the libraries, then a row each of Continue Watching and Recently Added.
+async function home() {
+  const items = await sections();
+  const shelves = await Promise.all([continueWatching(items), recentlyAdded(items)]);
+  return {
+    items: items,
+    shelves: [{ title: 'Continue Watching', items: shelves[0] }, { title: 'Recently Added', items: shelves[1] }]
+  };
+}
+
+// Each movie and TV library's first 20 by `query` (RECENT or ADDED), as `then` makes them, all
+// in one list. A library that fails to answer is left out rather than the home page.
+async function fromEachLibrary(libraries, query, then) {
+  const lists = libraries.map((lib) => {
+    const type = { movie: 1, show: 4 }[lib.type];
+    if (!type) return [];
+    return list(lib.key + '?type=' + type + '&' + query.replace('Size=100', 'Size=20')).then(then, () => []);
+  });
+  return [].concat.apply([], await Promise.all(lists));
+}
+
+// Home's Continue Watching: of each library's last 20 played, the films left partway and, a card
+// a show, the episode left partway or the one after the last watched, most recently played first.
+async function continueWatching(libraries) {
+  const all = await fromEachLibrary(libraries, RECENT, (items) =>
+    Promise.all(oneEachShow(items).map((i) => upNext(i).then((x) => Object.assign(x, { playedAt: i.lastViewedAt }))))
+  );
+  return all.filter(resumable).sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0));
+}
+
+// Home's Recently Added: films, and a card a show for its newest episode, newest first across the
+// libraries, as each library's own Recently Added lists them.
+async function recentlyAdded(libraries) {
+  const all = await fromEachLibrary(libraries, ADDED, oneEachShow);
+  return all.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 20);
+}
+
+// Worth continuing: left partway, or the next episode after one watched (upNext()).
+const resumable = (i) => i.viewOffset > 0 || /^Next: /.test(i.sub || '');
+
+// The home page: behind the focused library, the art of something in it, picked at random from
+// what was added last, a new pick on each visit home. Brighter than a page's backdrop, and shaded
+// toward the foot so the cards stay readable (#browse.home in index.html).
+let homeArts = {};
+function homeArt(e) {
+  const card = e.target;
+  if (!$('browse').classList.contains('home') || !card.item || !card.item.key) return;
+  // A film or episode in Continue Watching has its own art, an episode its show's.
+  if (card.item.ratingKey) return backdrop(card.item.grandparentArt || card.item.art);
+  const path = card.item.key;
+  homeArts[path] = homeArts[path] || list(path + '?sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=30').then(
+    (items) => {
+      const arts = items.map((i) => i.art).filter(Boolean);
+      return arts[Math.floor(Math.random() * arts.length)] || null;
+    },
+    () => null
+  );
+  homeArts[path].then((art) => {
+    if (document.activeElement === card && $('browse').classList.contains('home')) backdrop(art);
+  });
+}
+
 function render(page) {
   const grid = $('grid');
   const d = page.data;
@@ -553,27 +638,19 @@ function render(page) {
       grid.append(el('div', 'season-head', item.parentTitle || 'Season ' + season));
     }
     // A show's or season's episodes show their 16:9 stills; Recently Played keeps to posters.
-    const wide = d.about && item.type === 'episode';
-    const card = el('button', wide ? 'card wide' : 'card');
-    const img = new Image();
-    img.onload = () => img.classList.add('in');
-    if (item.thumb) later(img, wide ? still(item.thumb) : poster(item.thumb));
-    const art = el('div', 'art');
-    if (item.icon) art.innerHTML = ICONS[item.icon];
-    else art.append(img);
-    const text = label(item);
-    card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
-    card.onclick = () => open(item);
-    if (canMarkWatched(item)) {
-      card.append(el('i', 'corner'));
-      drawEye(card, item);
-      card.hold = () => cardMenu(item, card);
-    }
+    const card = cardFor(item, d.about && item.type === 'episode');
     if (indexed && item.ratingKey) {
       card.dataset.letter = letterOf(item);
       card.dataset.find = fold(item.title + ' ' + (item.originalTitle || ''));
     }
     grid.append(card);
+  });
+  // Home: under the libraries, a row each for what's partway through and what's new.
+  (d.shelves || []).forEach((shelf) => {
+    if (!shelf.items.length) return;
+    const row = el('div', 'cast shelf');
+    shelf.items.forEach((item) => row.append(cardFor(item)));
+    grid.append(el('div', 'season-head', shelf.title), row);
   });
   // The cast after what the page lists, a show's seasons or a season's episodes; a movie's page
   // lists nothing, so its cast follows its details.
@@ -1869,6 +1946,7 @@ function boot() {
   document.addEventListener('keydown', onKey);
   document.addEventListener('keyup', onKeyUp);
   $('grid').addEventListener('focusin', lightLetter);
+  $('grid').addEventListener('focusin', homeArt);
   $('search').addEventListener('input', filter);
   $('backdrop').onload = () => $('backdrop').classList.add('in');
   $('osd-poster').onload = () => $('osd-poster').classList.add('in');
@@ -1897,4 +1975,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };

@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -164,6 +164,12 @@ assert.deepEqual(textStreams({}), []);
 // OpenSubtitles results: an exact match first, then by score.
 const ranked = rankFound([{ key: 'a', score: '9' }, { key: 'b', score: '3', perfectMatch: '1' }, { key: 'c', score: '12' }, { key: 'd' }]);
 assert.deepEqual(ranked.map((f) => f.key), ['b', 'c', 'a', 'd']);
+
+// Continue Watching keeps what was left partway and the next episode after one watched, not a
+// film or a show's last episode played through.
+assert.ok(resumable({ type: 'movie', viewOffset: 60000 }));
+assert.ok(resumable({ type: 'episode', sub: 'Next: S2 E1' }));
+assert.ok(!resumable({ type: 'movie', viewCount: 1 }) && !resumable({ type: 'episode', viewCount: 1 }));
 
 // Saved subtitles: dropped oldest first, those from before the order was kept before any, and
 // never the one being saved.

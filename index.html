@@ -390,6 +390,21 @@
     opacity: 0; transition: opacity .6s;
   }
   #backdrop.in { opacity: .15; }
+  /* Home: the focused library's art (homeArt() in app.js), brighter, under a shade of the page's
+     colour that deepens toward the foot and the left, where the title and cards are. The bar
+     behind the header and the grid's top fade go, so the art runs up to the screen's top: the
+     grid fades out by its own mask instead, which shows the art through rather than a band of
+     the page's colour. ponytail: Chromium 56 drops the mask while the page is pushed back for a
+     card's menu, so the top of home blinks then; draw the fade over the art if that grates. */
+  #browse.home #grid { -webkit-mask-image: linear-gradient(transparent, #000 40px); }
+  #shade { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  #browse.home #shade {
+    display: block;
+    background: linear-gradient(rgba(20, 20, 22, 0) 30%, #141416 92%), linear-gradient(to right, rgba(20, 20, 22, .7), rgba(20, 20, 22, 0) 60%);
+  }
+  #browse.home #backdrop.in { opacity: .6; }
+  #browse.home header { background: none; }
+  #browse.home::before { display: none; }
   /* Over a page's art, a bar of the page's colour with a little of the art through it, which
      the grid's top fade carries on from. On a page without art it's the page's colour anyway. */
   header { position: relative; background: rgba(20, 20, 22, .85); }
@@ -405,6 +420,12 @@
   .cast { flex: 0 0 calc(100% + 128px); display: flex; overflow: hidden; margin: 16px -64px 40px; padding: 8px 0; }
   .cast::before { content: ''; flex: none; width: 80px; }
   .cast::after { content: ''; flex: none; width: 56px; }
+  /* Home's Continue Watching: a row of cards, each the width a grid's six-across card has, the
+     first in line with the libraries above. Room above and below for a focused card's growth
+     and shadow, which the row would otherwise clip. */
+  .shelf { margin-top: 0; padding: 24px 0 56px; }
+  .shelf::before { width: 64px; }
+  .shelf .card { flex: none; width: calc((100vw - 128px) / 6 - 32px); }
   .person {
     flex: none; width: 160px; margin-right: 24px; padding: 0; border: 0; outline: none; background: none;
     color: inherit; font: inherit; font-size: 22px; text-align: center;
@@ -458,6 +479,7 @@
 
   <main id="browse" hidden>
     <img id="backdrop" alt="">
+    <div id="shade"></div>
     <audio id="theme"></audio>
     <header><img id="logo" src="logo.png" alt="Hotaru" hidden><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div><span id="clock" class="clock dim"></span></header>
     <div id="grid"></div>
