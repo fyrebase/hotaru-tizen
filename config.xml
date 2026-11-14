@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The .wgt manifest, for installing without TizenBrew (Apps2Samsung, from a release). TizenBrew reads package.json instead. The release workflow stamps version from the tag. -->
+<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://github.com/fyrebase/hotaru-tizenbrew" version="0.1.0" viewmodes="fullscreen">
+    <access origin="*" subdomains="true"></access>
+    <tizen:application id="HotaruPlex.Hotaru" package="HotaruPlex" required_version="2.3"/>
+    <content src="index.html"/>
+    <description>Hotaru for Samsung TVs: browse and play a Plex server.</description>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <icon src="logo.png"/>
+    <tizen:metadata key="http://tizen.org/metadata/app_ui_type/base_screen_resolution" value="fullscreen"/>
+    <name>Hotaru</name>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:profile name="tv"/>
+    <tizen:setting screen-orientation="landscape" context-menu="enable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

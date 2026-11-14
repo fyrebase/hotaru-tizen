@@ -1,0 +1,20 @@
+# Pushing a tag such as v0.2.0 publishes a release with Hotaru.wgt attached, which Apps2Samsung
+# lists when this repo is added as a source. It's unsigned: Apps2Samsung signs it when it installs.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  wgt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node check.js
+      - run: |
+          sed -i "s/\(<widget [^>]* version=\"\)[^\"]*/\1${GITHUB_REF_NAME#v}/" config.xml
+          zip Hotaru.wgt config.xml index.html app.js logo.png
+          gh release create "$GITHUB_REF_NAME" Hotaru.wgt --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

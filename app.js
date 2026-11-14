@@ -1652,6 +1652,10 @@ function boot() {
   if (!localStorage.getItem('clientId')) localStorage.setItem('clientId', 'hotaru-tv-' + Math.random().toString(16).slice(2));
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
   subtitleStyle();
+  // TizenBrew registers the media keys from package.json; installed as a .wgt, the app does.
+  if (window.tizen && tizen.tvinputdevice) ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaRewind', 'MediaFastForward'].forEach((k) => {
+    try { tizen.tvinputdevice.registerKey(k); } catch (e) {}
+  });
   document.addEventListener('keydown', onKey);
   document.addEventListener('keyup', onKeyUp);
   $('grid').addEventListener('focusin', lightLetter);
