@@ -14,6 +14,10 @@ A TizenBrew app module that browses and plays a Plex server: the TV counterpart 
 
 Serve the repo with `npx serve -l 8081` and open `http://localhost:8081` at a 1920×1080 viewport. It has to be a `localhost` or `127.0.0.1` address: Plex Media Server answers CORS only for those and `https://app.plex.tv`, so from a LAN address such as `http://192.168.1.17:8081` every server check fails and sign-in ends in "No Plex server on this account answered". From another machine, tunnel the port (`ssh -L 8081:localhost:8081 <mac>`). TizenBrew serves the app from `http://127.0.0.1:8081`, so the TV is fine. The arrow keys, Enter, Escape (Back) and Space (play/pause) stand in for the remote. hls.js plays HLS where the browser can't.
 
+## Testing a change on the TV
+
+The `tv-dev` branch is a dev shell: a module that loads the app from the Mac's working copy, so a change needs no push, purge or install. Add it on the TV once as `fyrebase/hotaru-tizenbrew@tv-dev`. Then serve the repo on the Mac with `npx serve --cors -l 8081`, and open **Hotaru dev** on the TV; to see a change, save it, hold Back and open the module again. The shell writes the app into its own page, so it keeps TizenBrew's origin, which Plex answers CORS for. It expects the Mac at `192.168.1.17`; if that changes, edit `DEV` in the branch's `index.html`. On the owner's TV it loads, and keeps the main module's sign-in.
+
 ## Publishing to the TV
 
 TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. To see a change on the TV sooner, purge each changed file once, a few seconds after pushing: `https://purge.jsdelivr.net/gh/<owner>/<repo>/<file>`. Repeated purges get a file throttled (`"throttled": true`) for about half an hour, and purging while throttled seems to extend it. To test a commit at once, add the module pinned to it, `<owner>/<repo>@<sha>`, which jsDelivr has never cached; remove it afterwards.
