@@ -682,6 +682,11 @@ function play(item, fromStart, viaPlex) {
     () => (p.tracks = [])
   );
   requestAnimationFrame(() => drawSubtitles(p));
+  // The library stops drawing under the picture: on the TV its layers showed through the video
+  // when the overlay came up, and it cost the TV a page of cards behind every frame. Hidden, not
+  // removed, so its scroll and focus are there to come back to.
+  p.from = document.activeElement;
+  $('browse').classList.add('away');
   $('player').hidden = false;
   // Tizen plays HLS itself; desktop browsers without it get hls.js.
   if (s.session && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls) {
@@ -744,8 +749,11 @@ function stop() {
   if (playing.session) {
     fetch(url('/video/:/transcode/universal/stop', { session: playing.session }), { keepalive: true }).catch(() => {});
   }
+  const from = playing.from;
   playing = null;
   $('player').hidden = true;
+  $('browse').classList.remove('away');
+  if (from) from.focus({ preventScroll: true });
   $('subs').textContent = '';
   $('subs').hidden = true;
   $('menu').hidden = true;
