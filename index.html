@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Hotaru dev</title></head>
+<body style="margin: 0; background: #141416; color: rgba(255, 255, 255, .85); font: 28px system-ui, sans-serif;">
+<p id="msg" style="margin: 200px 80px;">Loading the app from the Mac&hellip;</p>
+<script>
+// Hotaru's dev shell: the app straight from the Mac's working copy, served there by
+// `npx serve --cors -l 8081`, so a change shows on the TV by opening this module again, with no
+// push, jsDelivr purge or install. The app is written into this page rather than navigated to,
+// so it keeps TizenBrew's origin, http://127.0.0.1:8081, which Plex answers CORS for, and its
+// sign-in. `?dev=` names another server, for trying the shell in a desktop browser.
+var DEV = (location.search.match(/[?&]dev=([^&]+)/) || [0, 'http://192.168.1.17:8081/'])[1];
+var bust = '?' + Date.now();
+fetch(DEV + 'index.html' + bust, { cache: 'no-store' })
+  .then(function (r) { return r.text(); })
+  .then(function (html) {
+    html = html
+      .replace('<head>', '<head><base href="' + DEV + '">')
+      .replace('src="app.js"', 'src="app.js' + bust + '"');
+    document.open();
+    document.write(html);
+    document.close();
+  })
+  .catch(function (e) {
+    document.getElementById('msg').textContent = 'No app at ' + DEV + ' (' + e.message + '). Is `npx serve --cors -l 8081` running on the Mac?';
+  });
+</script>
+</body>
+</html>

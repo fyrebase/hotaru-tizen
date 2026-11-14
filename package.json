@@ -1,0 +1,9 @@
+{
+  "name": "hotaru-tizenbrew-dev",
+  "version": "0.0.0",
+  "description": "Hotaru's dev shell: loads the app from a Mac's working copy, for testing on the TV without publishing.",
+  "packageType": "app",
+  "appName": "Hotaru dev",
+  "appPath": "index.html",
+  "keys": ["MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop", "MediaRewind", "MediaFastForward"]
+}
