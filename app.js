@@ -351,20 +351,43 @@ async function load(path) {
   return { items: both[0], about: about, cast: cast, seasons: more && more[0].filter((s) => s.type === 'season') };
 }
 
-// A person's page: their bio from Plex's online metadata, over their films in the library the
-// movie came from. The bio is left out when it can't be had: no account token from an older
-// sign-in, or plex.tv not answering. Plex Discover isn't documented: this is how Plex's web app
-// asks it, as Plezy (github.com/edde746/plezy) captured, by the cast entry's tagKey. The server's
-// own /library/people/<id> has no bio.
+// A person's page: their bio and filmography from Plex's online metadata, with their films in
+// the library the movie came from. Bio and filmography are left out when they can't be had: no
+// account token from an older sign-in, or plex.tv not answering. Plex Discover isn't
+// documented: this is how Plex's web app asks it, as Plezy (github.com/edde746/plezy) captured,
+// by the cast entry's tagKey. The server's own /library/people/<id> has neither.
 async function loadPerson(page) {
   const r = page.person;
-  const bio = cfg.account && r.tagKey
-    ? getJson(withParams('https://discover.provider.plex.tv/library/people/' + r.tagKey, { 'X-Plex-Token': cfg.account }))
-      .then((j) => (j.MediaContainer.Metadata || [])[0] || {}, () => ({}))
-    : Promise.resolve(null);
+  const discover = (path) =>
+    getJson(withParams('https://discover.provider.plex.tv/library/people/' + r.tagKey + path, { 'X-Plex-Token': cfg.account }))
+      .then((j) => j.MediaContainer);
+  const known = cfg.account && r.tagKey;
+  const bio = known ? discover('').then((mc) => (mc.Metadata || [])[0] || {}, () => ({})) : Promise.resolve(null);
+  // Grouped as Discover groups them: Actor, Director, Writer and so on.
+  const credits = known ? discover('/credits').then((mc) => mc.CreditGroup || [], () => []) : Promise.resolve([]);
   const films = list('/library/sections/' + page.section + '/all?' + (r.filter || 'actor=' + r.id)).catch(() => []);
-  const both = await Promise.all([films, bio]);
-  return { items: both[0], person: { role: r, bio: both[1] } };
+  const all = await Promise.all([films, bio, credits]);
+  return { items: all[0], person: { role: r, bio: all[1], credits: all[2] } };
+}
+
+// One of a person's filmography groups as a list, a line a title: its year, the title and the
+// part they played. Only to read: nothing in it takes focus, so the D-pad scrolls through it a
+// screenful at a time (move()). A title in the library is lit, matched by Plex's guid, which the
+// library and Discover share; it's among the cards above, to open from there.
+function creditList(group, owned) {
+  const box = el('div', 'credits');
+  const seen = {};
+  (group.Credit || []).forEach((c) => {
+    // One title, sent as an object, though Plex sends most such things as a list of one.
+    const m = Array.isArray(c.Metadata) ? c.Metadata[0] : c.Metadata;
+    if (!m || seen[m.guid || m.title]) return;
+    seen[m.guid || m.title] = true;
+    const mine = m.guid && owned.filter((i) => i.guid === m.guid)[0];
+    const b = el('div', mine ? 'credit on' : 'credit');
+    b.append(el('span', 'year', m.year ? String(m.year) : ''), el('span', 'title', m.title), el('span', 'part', c.role || ''));
+    box.append(b);
+  });
+  return box;
 }
 
 function openPerson(r, about) {
@@ -429,6 +452,8 @@ function render(page) {
   const grid = $('grid');
   const d = page.data;
   grid.innerHTML = '';
+  // A person's page has no title, search or seasons to head it, so it starts at the screen's top.
+  $('browse').classList.toggle('headless', !!d.person);
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
   theme(d.about && (d.about.theme || d.about.parentTheme));
@@ -478,6 +503,9 @@ function render(page) {
   // The cast after what the page lists, a show's seasons or a season's episodes; a movie's page
   // lists nothing, so its cast follows its details.
   if (d.cast) grid.append(el('div', 'season-head', 'Cast'), castBlock(d.cast));
+  if (d.person) {
+    d.person.credits.forEach((g) => g.Credit && g.Credit.length && grid.append(el('div', 'season-head', g.title), creditList(g, d.items)));
+  }
   if (indexed) filter();
   else letters(false);
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
@@ -750,18 +778,21 @@ function back() {
 function move(dir) {
   const all = focusables();
   const cur = document.activeElement;
+  // A page with nothing to focus at all, a person with no films in the library, only scrolls.
+  if (!all.length && (dir === 'up' || dir === 'down')) return scrollGrid($('grid').scrollTop + (dir === 'down' ? 0.8 : -0.8) * $('grid').clientHeight);
   if (all.indexOf(cur) < 0) return focusCard(all[0]);
-  // Details too long for the screen, a person's bio, have nothing to focus, so Up and Down read
-  // through them a step at a time: Down while the focused card is still below the screen, Up
-  // from the top row. Each step keeps a fifth of the last screenful in view.
+  // What has nothing to focus, a person's bio above their films and their filmography below,
+  // Up and Down read through a screenful at a time, keeping a fifth of the last in view: toward
+  // the focused card while it's off the screen, and on past the page's first or last card. A
+  // step toward the card goes no further than centres it, where moving on to it would anyway.
   const grid = $('grid');
   const step = 0.8 * grid.clientHeight;
-  if (dir === 'down' && grid.contains(cur)) {
+  if ((dir === 'up' || dir === 'down') && grid.contains(cur)) {
     const r = cur.getBoundingClientRect();
     const g = grid.getBoundingClientRect();
-    // No further than centres the card, where moving on to it would scroll anyway.
     const centred = grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2);
-    if (r.bottom > g.bottom) return scrollGrid(Math.min(grid.scrollTop + step, centred));
+    if (dir === 'down' && r.bottom > g.bottom) return scrollGrid(Math.min(grid.scrollTop + step, centred));
+    if (dir === 'up' && r.top < g.top) return scrollGrid(Math.max(grid.scrollTop - step, centred));
   }
   // Up and Down keep to the side focus is on, the strip or the page; Left and Right cross.
   const strip = $('letters');
@@ -770,6 +801,7 @@ function move(dir) {
   const to = nearest(cur.getBoundingClientRect(), others, dir);
   if (!to && dir === 'left') return openSettings();
   if (!to && dir === 'up' && grid.contains(cur)) return scrollGrid(Math.max(0, grid.scrollTop - step));
+  if (!to && dir === 'down' && grid.contains(cur)) return scrollGrid(grid.scrollTop + step);
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
   const target = to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to;
