@@ -1128,7 +1128,8 @@ const SUBTITLE_PREFS = [
 // The cards' landing effects (land()), on unless turned off.
 const CARD_PREFS = [
   { name: 'cardTilt', label: 'Tilt cards', detail: 'A card leans in from the way the D-pad moved.', def: 1, min: 0, max: 1, toggle: true },
-  { name: 'cardGlimmer', label: 'Card glimmer', detail: 'A band of light sweeps a card as it takes focus.', def: 1, min: 0, max: 1, toggle: true }
+  { name: 'cardGlimmer', label: 'Card glimmer', detail: 'A band of light sweeps a card as it takes focus.', def: 1, min: 0, max: 1, toggle: true },
+  { name: 'cardEdge', label: 'Lit card edges', detail: 'A rim and a glow of light along the top of each card.', def: 1, min: 0, max: 1, toggle: true }
 ];
 const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS).filter((p) => p.name === name)[0];
 
@@ -1150,6 +1151,8 @@ function subtitleStyle() {
   // As the Mac pads it: this either side, half above and below, where the leading adds to it.
   s.setProperty('--subs-padding', v.subtitlePadding / 2 + 'px ' + v.subtitlePadding + 'px');
   s.setProperty('--subs-radius', v.subtitleRadius + 'px');
+  // Not a subtitle style, but set here so it follows Settings at once and from boot.
+  document.documentElement.classList.toggle('no-edge', !prefValue(prefOf('cardEdge')));
 }
 
 // Settings, laid out as the Mac app's (its src/settings.rs): its pages down a sidebar, the one
@@ -1159,7 +1162,7 @@ function subtitleStyle() {
 // D-pad moves between its controls, Left and Right change a setting, and Back or Left past the
 // first returns to the sidebar. Back from the sidebar closes it, handing focus back.
 const SETTINGS_PAGES = [
-  { title: 'General', icon: 'settings2', draw: (page) => prefRows(page, CARD_PREFS) },
+  { title: 'General', icon: 'settings2', draw: generalPage },
   { title: 'Subtitles', icon: 'captions', draw: subtitlesPage },
   { title: 'Plex', icon: 'server', draw: plexPage }
 ];
@@ -1204,6 +1207,13 @@ const focusFirst = (box) => {
   if (b) b.focus();
 };
 
+// The card effects under one heading, which says once what they all cost.
+function generalPage(page) {
+  const head = el('div', 'group');
+  head.append(el('div', '', 'Card effects'), el('div', 'dim', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.'));
+  page.append(head);
+  prefRows(page, CARD_PREFS);
+}
 // The Mac's: a sample over a stand-in for a bright picture, then the settings.
 function subtitlesPage(page) {
   const sample = el('div', 'sample');

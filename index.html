@@ -140,6 +140,8 @@
     -webkit-mask-composite: xor;
     mask-composite: exclude;
   }
+  /* Off in Settings, General: each card's two overlay blends cost a slow TV every frame. */
+  .no-edge .art::before, .no-edge .art::after { display: none; }
   .card span { display: block; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The detail wraps to four lines at most, and always takes all four, so every card in a grid
      is the same height. -webkit-box is the line clamp Chromium 56 knows. */
@@ -287,6 +289,9 @@
   }
   .switch.on .knob { transform: translateX(28px); }
   .row .tab { padding: 6px 16px; font-size: 24px; }
+  /* A group's heading over its rows: its name, and a line on what they share. */
+  #settings .group { padding: 0 16px 12px; }
+  #settings .group .dim { margin-top: 4px; font-size: 22px; }
   #settings .account .dim { margin-top: 4px; font-size: 24px; }
   #settings .actions { padding-top: 32px; }
 
