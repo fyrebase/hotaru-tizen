@@ -107,6 +107,7 @@ const ICONS = {
   rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
   calendarPlus: lucide('<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/>'),
   check: lucide('<path d="M20 6 9 17l-5-5"/>'),
+  settings2: lucide('<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'),
   captions: lucide('<rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/>'),
   server: lucide('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/>')
 };
@@ -602,7 +603,26 @@ function move(dir) {
   if (!to && dir === 'left') return openSettings();
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
-  focusCard(to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to);
+  const target = to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to;
+  focusCard(target);
+  if (target && target.classList.contains('card')) land(target, dir);
+}
+
+// Focus moved onto a card by the D-pad: the card tilts back from the way it came and settles,
+// and a band of light sweeps across its art the same way, the Mac app's glimmer (glimmer() in
+// its src/main.rs, switched off there). Both are transforms only, which Chromium 56 composites.
+// Each can be turned off in Settings, General.
+function land(card, dir) {
+  card.classList.remove('go-left', 'go-right', 'go-up', 'go-down');
+  void card.offsetWidth; // so the tilt starts again on a card it ran on before
+  if (prefValue(prefOf('cardTilt'))) card.classList.add('go-' + dir);
+  if (!prefValue(prefOf('cardGlimmer'))) return;
+  const art = card.querySelector('.art');
+  const old = art.querySelector('.glint');
+  if (old) old.remove();
+  const glint = el('i', dir === 'left' ? 'glint back' : 'glint');
+  glint.addEventListener('animationend', () => glint.remove());
+  art.append(glint);
 }
 
 // The candidate (as [thing, rect]) nearest `from` in `dir`, weighing distance off the line of
@@ -1043,6 +1063,13 @@ const SUBTITLE_PREFS = [
   { name: 'subtitleRadius', label: 'Rounded corners', detail: "How round the box's corners are.", def: 2, min: 0, max: 16, step: 1, unit: 'px' }
 ];
 
+// The cards' landing effects (land()), on unless turned off.
+const CARD_PREFS = [
+  { name: 'cardTilt', label: 'Tilt cards', detail: 'A card leans in from the way the D-pad moved.', def: 1, min: 0, max: 1, toggle: true },
+  { name: 'cardGlimmer', label: 'Card glimmer', detail: 'A band of light sweeps a card as it takes focus.', def: 1, min: 0, max: 1, toggle: true }
+];
+const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS).filter((p) => p.name === name)[0];
+
 function prefValue(p) {
   const saved = localStorage.getItem(p.name);
   const v = Number(saved);
@@ -1070,6 +1097,7 @@ function subtitleStyle() {
 // D-pad moves between its controls, Left and Right change a setting, and Back or Left past the
 // first returns to the sidebar. Back from the sidebar closes it, handing focus back.
 const SETTINGS_PAGES = [
+  { title: 'General', icon: 'settings2', draw: (page) => prefRows(page, CARD_PREFS) },
   { title: 'Subtitles', icon: 'captions', draw: subtitlesPage },
   { title: 'Plex', icon: 'server', draw: plexPage }
 ];
@@ -1119,7 +1147,11 @@ function subtitlesPage(page) {
   const sample = el('div', 'sample');
   sample.append(el('span', 'subs-box', 'Subtitles will look like this,\nover one line or two.'));
   page.append(sample);
-  SUBTITLE_PREFS.forEach((p) => {
+  prefRows(page, SUBTITLE_PREFS);
+}
+
+function prefRows(page, prefs) {
+  prefs.forEach((p) => {
     const b = el('button', 'row');
     b.dataset.pref = p.name;
     const text = el('span', 'text');
@@ -1128,6 +1160,13 @@ function subtitlesPage(page) {
     page.append(b);
     drawSetting(b);
   });
+}
+
+function setPref(b, v) {
+  const p = prefOf(b.dataset.pref);
+  localStorage.setItem(p.name, Math.max(p.min, Math.min(p.max, v)));
+  subtitleStyle();
+  drawSetting(b);
 }
 
 // The Mac's: the server and its address, then its actions, each a raised key in its own track.
@@ -1144,13 +1183,18 @@ function plexPage(page) {
   page.append(who, actions);
 }
 
-// A setting row's control: the colours as a choice in its track, the chosen one a raised key
-// (DESIGN.md), the rest as a slider and its value, as on the Mac.
+// A setting row's control, as on the Mac: a switch for on or off, the colours as a choice in its
+// track, the chosen one a raised key (DESIGN.md), the rest as a slider and its value.
 function drawSetting(b) {
-  const p = SUBTITLE_PREFS.filter((q) => q.name === b.dataset.pref)[0];
+  const p = prefOf(b.dataset.pref);
   const v = prefValue(p);
   const control = b.querySelector('.control');
   control.innerHTML = '';
+  if (p.toggle) {
+    const sw = el('span', v ? 'switch on' : 'switch');
+    sw.append(el('span', 'knob'));
+    return control.append(sw);
+  }
   if (p.choices) {
     const track = el('span', 'track');
     p.choices.forEach((c, i) => track.append(el('span', i === v ? 'tab on' : 'tab', c[0])));
@@ -1180,15 +1224,11 @@ function settingsKey(k) {
     return;
   }
   if (k === 'back') return nav.children[settingsAt].focus();
+  const p = cur.dataset.pref && prefOf(cur.dataset.pref);
+  // A switch flips on OK; Left and Right also turn it off and on.
+  if (p && p.toggle && k === 'enter') return setPref(cur, 1 - prefValue(p));
   if (k === 'enter') return cur.click();
-  const p = SUBTITLE_PREFS.filter((q) => q.name === cur.dataset.pref)[0];
-  if (p && (k === 'left' || k === 'right')) {
-    const step = p.choices ? 1 : p.step;
-    const v = Math.max(p.min, Math.min(p.max, prefValue(p) + (k === 'left' ? -step : step)));
-    localStorage.setItem(p.name, v);
-    subtitleStyle();
-    return drawSetting(cur);
-  }
+  if (p && (k === 'left' || k === 'right')) return setPref(cur, prefValue(p) + (k === 'left' ? -1 : 1) * (p.step || 1));
   const others = Array.from($('settings-page').querySelectorAll('button'))
     .filter((b) => b !== cur)
     .map((b) => [b, b.getBoundingClientRect()]);

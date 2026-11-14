@@ -89,6 +89,25 @@
   @media (max-width: 1279px) { .card { width: calc(25% - 32px); } .card.wide { width: calc(50% - 32px); } }
   @media (max-width: 959px) { .card { width: calc(100% / 3 - 32px); } .card.wide { width: calc(100% - 32px); } }
   .card:focus { transform: scale(1.06); }
+  /* Landing on a card by the D-pad (land() in app.js): it tilts back from the way it came and
+     settles, while a slanted band of light sweeps its art, overlaid as the rim is. Cubic
+     ease-in-out, as the Mac's glimmer: its slow ends pass while the band is mostly off the card. */
+  .card.go-right:focus { animation: tilt-right .45s ease-out; }
+  .card.go-left:focus { animation: tilt-left .45s ease-out; }
+  .card.go-down:focus { animation: tilt-down .45s ease-out; }
+  .card.go-up:focus { animation: tilt-up .45s ease-out; }
+  @keyframes tilt-right { from { transform: perspective(900px) rotateY(-14deg) scale(1.06); } to { transform: perspective(900px) scale(1.06); } }
+  @keyframes tilt-left { from { transform: perspective(900px) rotateY(14deg) scale(1.06); } to { transform: perspective(900px) scale(1.06); } }
+  @keyframes tilt-down { from { transform: perspective(900px) rotateX(14deg) scale(1.06); } to { transform: perspective(900px) scale(1.06); } }
+  @keyframes tilt-up { from { transform: perspective(900px) rotateX(-14deg) scale(1.06); } to { transform: perspective(900px) scale(1.06); } }
+  .glint {
+    position: absolute; top: -10%; bottom: -10%; left: 0; width: 55%; z-index: 2; pointer-events: none;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .55), rgba(255, 255, 255, 0));
+    mix-blend-mode: overlay; animation: glint .45s cubic-bezier(.65, 0, .35, 1) forwards;
+  }
+  .glint.back { animation-name: glint-back; }
+  @keyframes glint { from { transform: translateX(-130%) skewX(-20deg); } to { transform: translateX(240%) skewX(-20deg); } }
+  @keyframes glint-back { from { transform: translateX(240%) skewX(-20deg); } to { transform: translateX(-130%) skewX(-20deg); } }
   .art {
     position: relative; height: 0; padding-bottom: 150%; border-radius: 8px; overflow: hidden;
     background: #1a1a1c; transition: box-shadow .15s;
@@ -240,6 +259,15 @@
   .row .slider { flex: 1; }
   .row .value { width: 90px; text-align: right; font-size: 24px; font-variant-numeric: tabular-nums; }
   .row .track { margin: 0; padding: 4px; }
+  /* A switch: a faint track, blue when on as the sliders' fill is, its knob a raised key. */
+  .switch { position: relative; display: block; width: 64px; height: 36px; border-radius: 18px; background: rgba(255, 255, 255, .15); transition: background .2s; }
+  .switch.on { background: #0a84ff; }
+  .switch .knob {
+    position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; box-sizing: border-box; transition: transform .2s;
+    border: 1px solid transparent; border-bottom: 0; border-radius: 50%; box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+    background: linear-gradient(#5c5c63, #3c3c40) padding-box, linear-gradient(#7a7a82, #2a2a2d) border-box;
+  }
+  .switch.on .knob { transform: translateX(28px); }
   .row .tab { padding: 6px 16px; font-size: 24px; }
   #settings .account .dim { margin-top: 4px; font-size: 24px; }
   #settings .actions { padding-top: 32px; }
