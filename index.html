@@ -20,16 +20,22 @@
 
   /* The search, in the recessed track every value sits in (DESIGN.md), with Lucide's search icon. */
   #search {
-    position: absolute; top: 36px; right: 96px; width: 420px; box-sizing: border-box;
+    position: absolute; top: 36px; left: 50%; width: 420px; margin-left: -210px; box-sizing: border-box;
     padding: 12px 20px 12px 60px; border: 0; border-radius: 12px; outline: none;
     background: #0b0b0c no-repeat 20px center / 28px 28px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-opacity='.45' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, .8), 0 1px 0 rgba(255, 255, 255, .08);
     color: inherit; font: inherit; font-size: 26px;
   }
-  /* A season's page's seasons, where the search sits on a library's. The chosen one is the Mac's
+  /* A season's page's seasons, centred where the search sits on a library's. The chosen one is the Mac's
      raised key (key() in its src/main.rs): a rim running light to dark round a fill that does the
      same; the rest are bare labels. */
-  #seasons { position: absolute; top: 34px; right: 96px; margin: 0; }
+  #seasons { position: absolute; top: 34px; left: 50%; margin: 0; transform: translateX(-50%); }
+  /* The time, far right in the header and atop the playing overlay, level with the title, dim as
+     secondary information is (tick() in app.js). Over the picture it takes a shadow to stay
+     legible on a bright scene. A person's page hides its header but keeps the time. */
+  .clock { position: absolute; top: 38px; right: 80px; height: 72px; line-height: 72px; font-size: 32px; font-variant-numeric: tabular-nums; }
+  #browse.headless #clock { visibility: visible; }
+  #osd-clock { text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
   .tab {
     display: inline-block; padding: 8px 22px; border: 1px solid transparent; border-bottom: 0;
     border-radius: 10px; outline: none; background: none; color: inherit; font: inherit; font-size: 26px;
@@ -242,9 +248,9 @@
     background: rgba(0, 0, 0, .5); opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s, transform .4s;
   }
   #spinner.in { opacity: 1; visibility: visible; transition: opacity .3s, transform .4s; }
-  /* While the playing overlay's title is up (overlay() in app.js), top right, 80px in as the
-     overlay's own edges are, clear of the title, moving there as the overlay fades. */
-  #spinner.aside { transform: translate(calc(50vw - 128px), calc(128px - 50vh)); }
+  /* While the playing overlay's title is up (overlay() in app.js), top right under the time, 80px
+     in as the overlay's own edges are, clear of the title, moving there as the overlay fades. */
+  #spinner.aside { transform: translate(calc(50vw - 128px), calc(182px - 50vh)); }
   #spinner i {
     position: absolute; top: 20px; left: 20px; width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%;
     border: 5px solid rgba(255, 255, 255, .85); border-right-color: transparent; animation: spin .8s linear infinite;
@@ -453,7 +459,7 @@
   <main id="browse" hidden>
     <img id="backdrop" alt="">
     <audio id="theme"></audio>
-    <header><img id="logo" src="logo.png" alt="Hotaru" hidden><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div></header>
+    <header><img id="logo" src="logo.png" alt="Hotaru" hidden><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div><span id="clock" class="clock dim"></span></header>
     <div id="grid"></div>
     <div id="letters" hidden></div>
     <div id="preloader"><img src="logo.png" alt=""></div>
@@ -462,7 +468,7 @@
 
   <div id="player" hidden>
     <video id="video"></video>
-    <div id="osd"><div id="osd-head"><div id="osd-art"><div class="art"><img id="osd-poster" alt=""></div></div><div id="osd-text"><div id="osd-title"></div><div id="osd-sub" class="dim"></div></div></div><div id="osd-bar"><span id="osd-time" class="dim"></span><div id="scrub" class="slider"><div id="scrub-fill" class="fill"></div><div id="scrub-knob" class="knob"></div></div></div></div>
+    <div id="osd"><span id="osd-clock" class="clock dim"></span><div id="osd-head"><div id="osd-art"><div class="art"><img id="osd-poster" alt=""></div></div><div id="osd-text"><div id="osd-title"></div><div id="osd-sub" class="dim"></div></div></div><div id="osd-bar"><span id="osd-time" class="dim"></span><div id="scrub" class="slider"><div id="scrub-fill" class="fill"></div><div id="scrub-knob" class="knob"></div></div></div></div>
     <div id="subs-line"><span id="subs" class="subs-box" hidden></span></div>
     <div id="flash"></div>
   </div>

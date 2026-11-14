@@ -1743,6 +1743,15 @@ function onKey(e) {
   if (k === 'left' || k === 'right' || k === 'up' || k === 'down') move(k);
 }
 
+// The time of day in the header and the playing overlay, in the TV's own format: "9:41 PM" or
+// "21:41". Checked each second, so it turns over with the minute.
+function tick() {
+  const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  ['clock', 'osd-clock'].forEach((id) => {
+    if ($(id).textContent !== now) $(id).textContent = now;
+  });
+}
+
 function boot() {
   cfg.server = localStorage.getItem('plexUrl') || '';
   cfg.name = localStorage.getItem('plexServer') || '';
@@ -1761,6 +1770,8 @@ function boot() {
   $('search').addEventListener('input', filter);
   $('backdrop').onload = () => $('backdrop').classList.add('in');
   $('osd-poster').onload = () => $('osd-poster').classList.add('in');
+  tick();
+  setInterval(tick, 1000);
   const v = $('video');
   v.ontimeupdate = time;
   v.onended = stop;
