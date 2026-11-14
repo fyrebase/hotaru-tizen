@@ -254,6 +254,38 @@ let osdTimer;
 let seekTo = null; // where Left, Right, Rew and FF are taking playback, until it seeks there
 let seekTimer;
 
+// A title set as a poster sets it: a lead-in small on a line of its own, either everything up to
+// a colon ("Star Wars:") or a leading article ("The"), and the rest balanced over up to three
+// lines, never breaking after a little word like "of". Each line is { text, small }.
+// ponytail: LINE is characters per line by eye for Anton SC at 96px, about 770px; measure the text if titles crowd.
+const LITTLE = ['a', 'an', 'the', 'of', 'and', '&', 'in', 'on', 'to', 'for', 'at', 'or', 'by', 'with', 'from'];
+const LINE = 22;
+function titleLines(title) {
+  const words = title.split(/\s+/).filter(Boolean);
+  const colon = words.findIndex((w, i) => /:$/.test(w) && i < words.length - 1);
+  const lead = colon >= 0 ? colon + 1 : words.length > 1 && /^(a|an|the)$/i.test(words[0]) ? 1 : 0;
+  const rest = words.slice(lead);
+  const len = (line) => line.join(' ').length;
+  const cost = (lines) =>
+    Math.max.apply(null, lines.map(len)) +
+    lines.slice(0, -1).reduce((n, l) => n + (LITTLE.includes(l[l.length - 1].toLowerCase()) ? 100 : 0), 0);
+  // Every way to break `ws` into `k` lines, the cheapest kept.
+  const split = (ws, k) => {
+    if (k === 1) return [ws];
+    let best = null;
+    for (let i = 1; i <= ws.length - k + 1; i++) {
+      const lines = [ws.slice(0, i)].concat(split(ws.slice(i), k - 1));
+      if (!best || cost(lines) < cost(best)) best = lines;
+    }
+    return best;
+  };
+  const k = Math.min(rest.length, Math.ceil(len(rest) / LINE), 3);
+  const lines = rest.length ? split(rest, Math.max(k, 1)) : [];
+  return (lead ? [{ text: words.slice(0, lead).join(' '), small: true }] : []).concat(
+    lines.map((l) => ({ text: l.join(' '), small: false }))
+  );
+}
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -608,8 +640,15 @@ function play(item, fromStart, viaPlex) {
   }
   v.play().catch(() => {});
   const h = heading(item);
-  $('osd-title').textContent = h[0];
+  const t = $('osd-title');
+  t.innerHTML = '';
+  titleLines(h[0] || '').forEach((line) => t.append(el('div', line.small ? 'small' : '', line.text)));
   $('osd-sub').textContent = h[1];
+  // The show's poster for an episode, the film's for a film.
+  const art = item.grandparentThumb || item.thumb;
+  $('osd-art').hidden = !art;
+  $('osd-poster').classList.remove('in');
+  if (art) $('osd-poster').src = poster(art);
   osd();
 }
 
@@ -1078,6 +1117,7 @@ function boot() {
   $('grid').addEventListener('focusin', lightLetter);
   $('search').addEventListener('input', filter);
   $('backdrop').onload = () => $('backdrop').classList.add('in');
+  $('osd-poster').onload = () => $('osd-poster').classList.add('in');
   const v = $('video');
   v.ontimeupdate = time;
   v.onended = stop;
@@ -1095,4 +1135,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT };

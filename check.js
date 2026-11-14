@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -171,5 +171,19 @@ assert.ok(finds('Pokémon', 'POK'));
 assert.ok(finds('Sugar (2024)', '2024'));
 assert.ok(finds("Tom Clancy's Jack Ryan", 'jack'));
 assert.ok(!finds('Westworld', 'world'));
+
+// Titles set as posters set them: "The", or all up to a colon, small over the rest, long titles
+// balanced over lines, never breaking after a little word. Small lines in lower case here.
+const set = (t) => titleLines(t).map((l) => (l.small ? l.text.toLowerCase() : l.text)).join(' / ');
+assert.equal(set('The Last of Us'), 'the / Last of Us');
+assert.equal(set('House of the Dragon'), 'House of the Dragon');
+assert.equal(set('Silo'), 'Silo');
+assert.equal(set('The'), 'The');
+assert.equal(set("Tom Clancy's Jack Ryan"), "Tom Clancy's Jack Ryan");
+assert.equal(set('Star Wars: The Clone Wars'), 'star wars: / The Clone Wars');
+assert.equal(set('Mission: Impossible'), 'mission: / Impossible');
+assert.equal(set('Ash vs Evil Dead:'), 'Ash vs Evil Dead:');
+assert.equal(set('The Lord of the Rings: The Return of the King'), 'the lord of the rings: / The Return of the King');
+assert.equal(set('Everything Everywhere All at Once'), 'Everything Everywhere / All at Once');
 
 console.log('ok');

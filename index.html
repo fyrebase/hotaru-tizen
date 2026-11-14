@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Hotaru</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Anton+SC&display=swap">
 <style>
   /* No grid, flex gap, aspect-ratio or inset: Tizen 4 runs Chromium 56. */
   html, body { margin: 0; height: 100%; overflow: hidden; background: #141416; }
@@ -127,15 +128,28 @@
 
   #player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; }
   #video { width: 100%; height: 100%; }
-  #osd {
-    position: absolute; left: 0; right: 0; bottom: 0; padding: 120px 80px 60px;
-    background: linear-gradient(transparent, rgba(0, 0, 0, .7)); opacity: 0; transition: opacity .4s;
-  }
+  /* The playing overlay: the poster, title and episode at the left, halfway down, the seek bar
+     along the bottom, each over its own shade so the rest of the picture stays clear. */
+  #osd { position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0; transition: opacity .4s; }
   #osd.in { opacity: 1; }
-  #osd-title { font-size: 40px; }
+  #osd-head {
+    position: absolute; top: 0; bottom: 0; left: 0; right: 0; padding: 0 80px; display: flex; align-items: center;
+    background: linear-gradient(to right, rgba(0, 0, 0, .7), transparent 60%);
+  }
+  /* The poster as a card has it: lit edge, drop shadow and all (.art). */
+  #osd-art { flex: none; width: 140px; margin-right: 40px; }
+  #osd-text { flex: 1; min-width: 0; }
+  /* The title in a display face, Anton SC from Google Fonts, falling back to a heavy system face,
+     set over lines by titleLines(): stacked tight, its lead-in half size. */
+  #osd-title { font: 96px/1 "Anton SC", Impact, sans-serif; letter-spacing: .01em; margin-bottom: 12px; }
+  #osd-title > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #osd-title .small { font-size: .5em; }
   /* The time, then the Mac's seek bar (slider() in its src/main.rs) at TV size: a faint track,
      blue up to the playhead, and a knob drawn as a raised key. */
-  #osd-bar { display: flex; align-items: center; margin-top: 16px; }
+  #osd-bar {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 120px 80px 60px; display: flex; align-items: center;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .7));
+  }
   #osd-time { flex: none; margin-right: 32px; font-variant-numeric: tabular-nums; }
   #scrub { flex: 1; }
   .slider { position: relative; display: block; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .15); }
@@ -149,7 +163,7 @@
   /* Subtitles, in the Mac's default style: white on a 60% black box, 160% line height. They rise
      clear of the playing overlay while it shows. */
   #subs-line { position: absolute; left: 0; right: 0; bottom: 80px; text-align: center; transition: bottom .4s; }
-  #osd.in + #subs-line { bottom: 260px; }
+  #osd.in + #subs-line { bottom: 150px; }
   #subs {
     display: inline-block; max-width: 80%; padding: 6px 12px; border-radius: 3px; white-space: pre-line;
     background: rgba(0, 0, 0, .6); color: #fff; font-size: 44px; line-height: 1.6;
@@ -240,7 +254,7 @@
 
   <div id="player" hidden>
     <video id="video"></video>
-    <div id="osd"><div id="osd-title"></div><div id="osd-sub" class="dim"></div><div id="osd-bar"><span id="osd-time" class="dim"></span><div id="scrub" class="slider"><div id="scrub-fill" class="fill"></div><div id="scrub-knob" class="knob"></div></div></div></div>
+    <div id="osd"><div id="osd-head"><div id="osd-art"><div class="art"><img id="osd-poster" alt=""></div></div><div id="osd-text"><div id="osd-title"></div><div id="osd-sub" class="dim"></div></div></div><div id="osd-bar"><span id="osd-time" class="dim"></span><div id="scrub" class="slider"><div id="scrub-fill" class="fill"></div><div id="scrub-knob" class="knob"></div></div></div></div>
     <div id="subs-line"><span id="subs" hidden></span></div>
     <div id="flash"></div>
     <div id="menu" hidden><div class="dim">Subtitles</div><div id="menu-list"></div></div>
