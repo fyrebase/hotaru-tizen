@@ -73,19 +73,30 @@
   #letters button { color: rgba(255, 255, 255, .45); }
   #letters button.on { color: rgba(255, 255, 255, .85); }
   #letters button:focus { color: rgba(255, 255, 255, .85); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85); }
+  /* Cards share each row's width, as many to a row as the screen has room for: posters six at
+     1920, episodes' 16:9 stills four. No CSS grid or aspect-ratio in Chromium 56, so the widths
+     step by media query and the art keeps its shape by padding. */
   .card {
-    width: 240px; margin: 16px; padding: 0; border: 0; background: none; outline: none;
+    width: calc(100% / 6 - 32px); margin: 16px; padding: 0; border: 0; background: none; outline: none;
     color: inherit; font: inherit; text-align: left; transition: transform .15s;
   }
+  .card.wide { width: calc(25% - 32px); }
+  @media (max-width: 1599px) { .card { width: calc(20% - 32px); } .card.wide { width: calc(100% / 3 - 32px); } }
+  @media (max-width: 1279px) { .card { width: calc(25% - 32px); } .card.wide { width: calc(50% - 32px); } }
+  @media (max-width: 959px) { .card { width: calc(100% / 3 - 32px); } .card.wide { width: calc(100% - 32px); } }
   .card:focus { transform: scale(1.06); }
-  .art { width: 240px; height: 360px; border-radius: 8px; overflow: hidden; background: #1a1a1c; transition: box-shadow .15s; }
+  .art {
+    position: relative; height: 0; padding-bottom: 150%; border-radius: 8px; overflow: hidden;
+    background: #1a1a1c; transition: box-shadow .15s;
+  }
+  .card.wide .art { padding-bottom: 56.25%; }
   .card:focus .art { box-shadow: 0 0 0 4px rgba(255, 255, 255, .85); }
-  .art svg { display: block; width: 96px; height: 96px; margin: 132px auto 0; color: rgba(255, 255, 255, .45); }
-  .art img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
+  .art svg { position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; color: rgba(255, 255, 255, .45); }
+  .art img {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transition: opacity .5s;
+  }
   .art img.in { opacity: 1; }
-  /* Episodes: 16:9 stills, four to a row. */
-  .card.wide, .card.wide .art { width: 416px; }
-  .card.wide .art { height: 234px; }
   .card span { display: block; margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The detail wraps to four lines at most, and always takes all four, so every card in a grid
      is the same height. -webkit-box is the line clamp Chromium 56 knows. */
