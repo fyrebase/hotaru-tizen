@@ -306,6 +306,7 @@ function render(page) {
   grid.innerHTML = '';
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
+  theme(d.about && (d.about.theme || d.about.parentTheme));
   if (d.about) grid.append(aboutBlock(d.about));
   // The libraries end with a way to sign in to another account or server, as Back there leaves
   // the app. ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
@@ -340,6 +341,24 @@ function render(page) {
   if (!d.items.length && !d.about) status('Nothing here');
   focusCard(focusables()[page.at || 0]);
   requestAnimationFrame(() => grid.classList.add('in'));
+}
+
+// A show's theme tune, played once from its page and on through its seasons' pages, and stopped
+// on leaving the show or playing something. ponytail: half the TV's volume; a setting if it
+// sits wrong against shows.
+function theme(path) {
+  const a = $('theme');
+  const src = path ? url(path) : '';
+  if (a.getAttribute('src') === src || (!src && !a.hasAttribute('src'))) return;
+  if (src) {
+    a.src = src;
+    a.volume = 0.5;
+    a.play().catch(() => {});
+  } else {
+    a.pause();
+    a.removeAttribute('src');
+    a.load();
+  }
 }
 
 // A movie's, show's or season's details, heading its page. A movie's page has nothing else on
@@ -526,6 +545,7 @@ function nearest(from, candidates, dir) {
 // `fromStart`: ignore the item's resume point. `viaPlex`: never straight off the server.
 function play(item, fromStart, viaPlex) {
   const v = $('video');
+  theme(null);
   const s = stream(item, (type) => v.canPlayType(type), viaPlex);
   // `tracks` stays null until the item's subtitle tracks are known; `track` -1 is off.
   const p = (playing = { item, fromStart, session: s.session, tracks: null, track: -1, cues: [] });
