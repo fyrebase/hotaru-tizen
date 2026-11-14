@@ -20,7 +20,7 @@ TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which cach
 
 On the owner's TV, TizenBrew's autolaunch is off; if it's on, pressing Up repeatedly while TizenBrew starts skips it for that start. Holding Back in a running app returns to TizenBrew's menu; history.back() from the app doesn't. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
 
-Running on the TV so far: sign-in and the Sign in card, the libraries, D-pad navigation, HLS playback without hls.js, and HEVC MP4 played straight off the server: Dolby Vision profile 8 (Tuner) shows as Dolby Vision, smoothly. Not yet checked there: the media keys.
+Running on the TV so far: sign-in, the libraries, D-pad navigation, HLS playback without hls.js, and HEVC MP4 played straight off the server: Dolby Vision profile 8 (Tuner) shows as Dolby Vision, smoothly. Not yet checked there: the media keys.
 
 ## Guardrails
 

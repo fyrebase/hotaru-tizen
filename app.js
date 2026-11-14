@@ -98,7 +98,8 @@ const ICONS = {
   play: lucide('<polygon points="6 3 20 12 6 21 6 3"/>'),
   rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
   check: lucide('<path d="M20 6 9 17l-5-5"/>'),
-  logIn: lucide('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>')
+  captions: lucide('<rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/>'),
+  server: lucide('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/>')
 };
 
 const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
@@ -344,9 +345,8 @@ function render(page) {
   theme(d.about && (d.about.theme || d.about.parentTheme));
   seasonTabs(d.seasons && d.seasons.length > 1 && d.seasons, d.about);
   if (d.about) grid.append(aboutBlock(d.about));
-  // The libraries end with a way to sign in to another account or server, as Back there leaves
-  // the app. ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
-  const items = page.key ? d.items : d.items.concat({ title: 'Sign in', sub: 'Another account or server', icon: 'logIn', pick: signIn });
+  // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
+  const items = d.items;
   // A library's whole listing gets the letter strip down its side and the search in the header.
   const indexed = /^\/library\/sections\/\w+\/all$/.test(page.key || '');
   grid.classList.toggle('indexed', indexed);
@@ -372,7 +372,7 @@ function render(page) {
     else art.append(img);
     const text = label(item);
     card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
-    card.onclick = () => (item.pick ? item.pick() : open(item));
+    card.onclick = () => open(item);
     if (indexed && item.ratingKey) {
       card.dataset.letter = letterOf(item);
       card.dataset.find = fold(item.title + ' ' + (item.originalTitle || ''));
@@ -589,6 +589,7 @@ function move(dir) {
   const side = (b) => dir === 'left' || dir === 'right' || strip.contains(b) === strip.contains(cur);
   const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
   const to = nearest(cur.getBoundingClientRect(), others, dir);
+  if (!to && dir === 'left') return openSettings();
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
   focusCard(to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to);
@@ -1019,10 +1020,186 @@ function signinScreen(msg, code, choices) {
   if (first) first.focus();
 }
 
+// How subtitles look, as in the Mac app's Settings (its src/prefs.rs, under the same names), kept
+// in localStorage. Sizes are in px, which at 1080 lines match the Mac's points at its usual size.
+// Its sliders step by 1; a remote needs bigger steps for the wide ranges.
+const SUBTITLE_PREFS = [
+  // The TV's own, where the Mac sizes subtitles to its window instead.
+  { name: 'subtitleSize', label: 'Text size', detail: 'How big subtitles are drawn.', def: 44, min: 28, max: 72, step: 2, unit: 'px' },
+  { name: 'subtitleColor', label: 'Text color', detail: 'The color subtitles are drawn in.', def: 0, min: 0, max: 2, choices: [['White', '#fff'], ['Yellow', '#ffd60a'], ['Cyan', '#64d2ff']] },
+  { name: 'subtitleLineHeight', label: 'Line height', detail: 'Space between lines of text.', def: 160, min: 100, max: 200, step: 5, unit: '%' },
+  { name: 'subtitleOpacity', label: 'Background', detail: 'How solid the box behind is.', def: 60, min: 0, max: 100, step: 5, unit: '%' },
+  { name: 'subtitlePadding', label: 'Padding', detail: 'Space around the text in the box.', def: 8, min: 0, max: 24, step: 1, unit: 'px' },
+  { name: 'subtitleRadius', label: 'Rounded corners', detail: "How round the box's corners are.", def: 2, min: 0, max: 16, step: 1, unit: 'px' }
+];
+
+function prefValue(p) {
+  const saved = localStorage.getItem(p.name);
+  const v = Number(saved);
+  return saved !== null && v >= p.min && v <= p.max ? v : p.def;
+}
+
+// Sets the subtitle settings as CSS variables, which every .subs-box draws with.
+function subtitleStyle() {
+  const v = {};
+  SUBTITLE_PREFS.forEach((p) => (v[p.name] = prefValue(p)));
+  const s = document.documentElement.style;
+  s.setProperty('--subs-size', v.subtitleSize + 'px');
+  s.setProperty('--subs-color', SUBTITLE_PREFS[1].choices[v.subtitleColor][1]);
+  s.setProperty('--subs-line', v.subtitleLineHeight / 100);
+  s.setProperty('--subs-bg', 'rgba(0, 0, 0, ' + v.subtitleOpacity / 100 + ')');
+  // As the Mac pads it: this either side, half above and below, where the leading adds to it.
+  s.setProperty('--subs-padding', v.subtitlePadding / 2 + 'px ' + v.subtitlePadding + 'px');
+  s.setProperty('--subs-radius', v.subtitleRadius + 'px');
+}
+
+// Settings, laid out as the Mac app's (its src/settings.rs): its pages down a sidebar, the one
+// showing on a lighter panel beside it, each setting a row with what it does under its name and
+// its control on the right. It slides in over the page on Left from wherever there's nothing
+// further left. In the sidebar, Up and Down change page and Right enters it; in a page, the
+// D-pad moves between its controls, Left and Right change a setting, and Back or Left past the
+// first returns to the sidebar. Back from the sidebar closes it, handing focus back.
+const SETTINGS_PAGES = [
+  { title: 'Subtitles', icon: 'captions', draw: subtitlesPage },
+  { title: 'Plex', icon: 'server', draw: plexPage }
+];
+let settingsFrom = null;
+let settingsAt = 0;
+
+function openSettings() {
+  const nav = $('settings-nav');
+  nav.innerHTML = '';
+  SETTINGS_PAGES.forEach((page, i) => {
+    const b = el('button');
+    b.innerHTML = ICONS[page.icon];
+    b.append(page.title);
+    b.onclick = () => focusFirst($('settings-page'));
+    b.dataset.page = i;
+    nav.append(b);
+  });
+  settingsFrom = document.activeElement;
+  $('settings').classList.add('in');
+  showSettingsPage(settingsAt);
+  nav.children[settingsAt].focus();
+}
+
+function closeSettings() {
+  $('settings').classList.remove('in');
+  if (settingsFrom) settingsFrom.focus({ preventScroll: true });
+  settingsFrom = null;
+}
+
+function showSettingsPage(i) {
+  settingsAt = i;
+  Array.from($('settings-nav').children).forEach((b, j) => b.classList.toggle('on', j === i));
+  const page = $('settings-page');
+  page.innerHTML = '';
+  page.scrollTop = 0;
+  page.append(el('h2', '', SETTINGS_PAGES[i].title));
+  SETTINGS_PAGES[i].draw(page);
+}
+
+const focusFirst = (box) => {
+  const b = box.querySelector('button');
+  if (b) b.focus();
+};
+
+// The Mac's: a sample over a stand-in for a bright picture, then the settings.
+function subtitlesPage(page) {
+  const sample = el('div', 'sample');
+  sample.append(el('span', 'subs-box', 'Subtitles will look like this,\nover one line or two.'));
+  page.append(sample);
+  SUBTITLE_PREFS.forEach((p) => {
+    const b = el('button', 'row');
+    b.dataset.pref = p.name;
+    const text = el('span', 'text');
+    text.append(el('span', '', p.label), el('span', 'dim', p.detail));
+    b.append(text, el('span', 'control'));
+    page.append(b);
+    drawSetting(b);
+  });
+}
+
+// The Mac's: the server and its address, then its actions, each a raised key in its own track.
+// Switching keeps this server until another is chosen; signing out forgets it.
+function plexPage(page) {
+  const who = el('div', 'account');
+  who.append(el('div', '', cfg.name || 'Plex server'), el('div', 'dim', cfg.server));
+  const actions = el('div', 'actions');
+  const then = (fn) => () => {
+    closeSettings();
+    fn();
+  };
+  actions.append(key('Switch server', null, then(signIn)), key('Sign out', null, then(signOut)));
+  page.append(who, actions);
+}
+
+// A setting row's control: the colours as a choice in its track, the chosen one a raised key
+// (DESIGN.md), the rest as a slider and its value, as on the Mac.
+function drawSetting(b) {
+  const p = SUBTITLE_PREFS.filter((q) => q.name === b.dataset.pref)[0];
+  const v = prefValue(p);
+  const control = b.querySelector('.control');
+  control.innerHTML = '';
+  if (p.choices) {
+    const track = el('span', 'track');
+    p.choices.forEach((c, i) => track.append(el('span', i === v ? 'tab on' : 'tab', c[0])));
+    return control.append(track);
+  }
+  const slider = el('span', 'slider');
+  const done = (100 * (v - p.min)) / (p.max - p.min) + '%';
+  const fill = el('span', 'fill');
+  const knob = el('span', 'knob');
+  fill.style.width = done;
+  knob.style.left = done;
+  slider.append(fill, knob);
+  control.append(slider, el('span', 'value dim', v + p.unit));
+}
+
+function settingsKey(k) {
+  const cur = document.activeElement;
+  const nav = $('settings-nav');
+  if (nav.contains(cur)) {
+    if (k === 'back') return closeSettings();
+    if (k === 'right' || k === 'enter') return focusFirst($('settings-page'));
+    const b = nav.children[settingsAt + ({ up: -1, down: 1 }[k] || 0)];
+    if (b && b !== cur) {
+      b.focus();
+      showSettingsPage(Number(b.dataset.page));
+    }
+    return;
+  }
+  if (k === 'back') return nav.children[settingsAt].focus();
+  if (k === 'enter') return cur.click();
+  const p = SUBTITLE_PREFS.filter((q) => q.name === cur.dataset.pref)[0];
+  if (p && (k === 'left' || k === 'right')) {
+    const step = p.choices ? 1 : p.step;
+    const v = Math.max(p.min, Math.min(p.max, prefValue(p) + (k === 'left' ? -step : step)));
+    localStorage.setItem(p.name, v);
+    subtitleStyle();
+    return drawSetting(cur);
+  }
+  const others = Array.from($('settings-page').querySelectorAll('button'))
+    .filter((b) => b !== cur)
+    .map((b) => [b, b.getBoundingClientRect()]);
+  const to = nearest(cur.getBoundingClientRect(), others, k);
+  if (to) to.focus();
+  else if (k === 'left') nav.children[settingsAt].focus();
+}
+
+// Forgets the server and its token, which only this browser's storage holds, and asks for a new
+// sign-in; Back there no longer returns to the libraries.
+function signOut() {
+  ['plexUrl', 'plexServer', 'plexToken'].forEach((name) => localStorage.removeItem(name));
+  Object.assign(cfg, { server: '', name: '', token: '' });
+  signIn();
+}
+
 // Signing in through plex.tv/link: show a code, poll until it's entered, then pick a server.
 // The saved server stays until a new one is chosen, so Back leaves sign-in unchanged.
 let signins = 0;
 async function signIn() {
+  theme(null);
   const run = ++signins;
   const live = () => run === signins && !$('signin').hidden;
   signinScreen('Getting a code\u2026');
@@ -1092,6 +1269,10 @@ function onKey(e) {
     }
     return;
   }
+  if ($('settings').classList.contains('in')) {
+    e.preventDefault();
+    return settingsKey(k);
+  }
   // In the search, keys type, move the caret or work the TV's keyboard: Backspace deletes rather
   // than going back, S and Space type. Down, or Back other than Backspace, returns to the cards.
   if (e.target === $('search')) {
@@ -1113,6 +1294,7 @@ function boot() {
   cfg.token = localStorage.getItem('plexToken') || '';
   if (!localStorage.getItem('clientId')) localStorage.setItem('clientId', 'hotaru-tv-' + Math.random().toString(16).slice(2));
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
+  subtitleStyle();
   document.addEventListener('keydown', onKey);
   $('grid').addEventListener('focusin', lightLetter);
   $('search').addEventListener('input', filter);
