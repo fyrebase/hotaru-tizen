@@ -474,9 +474,11 @@ function render(page) {
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
   // A page opens on its first card, or with none, a movie's Play; Back returns to where it was.
   const first = page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0];
-  // A person's page opens at its top, bio first, wherever its first film is.
+  // A person's page opens at its top, bio first, wherever its first film is. Chromium 56 ignores
+  // preventScroll, so the scroll focusing it makes is undone.
   if (d.person && !(page.at >= 0)) {
     if (first) first.focus({ preventScroll: true });
+    grid.scrollTop = 0;
   } else focusCard(first);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
@@ -729,6 +731,13 @@ function move(dir) {
   const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
   const to = nearest(cur.getBoundingClientRect(), others, dir);
   if (!to && dir === 'left') return openSettings();
+  // Up from the top row, with details too long to show beside it (a person's bio), shows them.
+  if (!to && dir === 'up' && $('grid').contains(cur)) {
+    const grid = $('grid');
+    if (grid.scrollTo) grid.scrollTo({ top: 0, behavior: 'smooth' });
+    else grid.scrollTop = 0; // Chromium 56 has no Element.scrollTo
+    return;
+  }
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
   const target = to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to;
