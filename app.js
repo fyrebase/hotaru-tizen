@@ -928,7 +928,12 @@ function clock(s) {
 
 function time() {
   const v = $('video');
-  $('osd-time').textContent = clock(seekTo != null ? seekTo : v.currentTime) + ' / ' + clock(v.duration);
+  const at = seekTo != null ? seekTo : v.currentTime;
+  $('osd-time').textContent = clock(at) + ' / ' + clock(v.duration);
+  // The bar follows a seek still adding up, as the clock does.
+  const done = v.duration > 0 && v.duration < Infinity ? Math.min(100, (100 * at) / v.duration) + '%' : '0';
+  $('scrub-fill').style.width = done;
+  $('scrub-knob').style.left = done;
 }
 
 function osd() {
