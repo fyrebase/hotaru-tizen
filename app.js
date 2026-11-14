@@ -27,9 +27,10 @@ const plexTv = (path, params, method) => getJson(withParams(PLEX_TV + path, Obje
 async function list(path) {
   const mc = (await getJson(url(path))).MediaContainer;
   const items = (mc.Directory || []).concat(mc.Metadata || []);
-  const recent = recentFolder(path, mc.viewGroup);
-  if (recent) items.unshift(recent);
-  return path.endsWith(RECENT) ? Promise.all(oneEachShow(items).map(upNext)) : items;
+  const folders = recentFolders(path, mc.viewGroup);
+  if (folders) items.unshift.apply(items, folders);
+  if (path.endsWith(RECENT)) return Promise.all(oneEachShow(items).map(upNext));
+  return path.endsWith(ADDED) ? oneEachShow(items) : items;
 }
 
 // A finished episode's card moves on to the episode after it, so OK plays what's next rather than
@@ -65,13 +66,20 @@ function nextAfter(eps, ep) {
 // Most recently watched first; the filter drops never-watched items.
 const RECENT = 'sort=lastViewedAt:desc&lastViewedAt%3E%3E=0&X-Plex-Container-Start=0&X-Plex-Container-Size=100';
 
-// A movie or TV library's "all" listing opens with a Recently Played folder. Shows are listed
-// by episode, so each entry says where you are in the show.
-function recentFolder(path, viewGroup) {
+// Newest first: for a TV library, newest episodes, so a show with a new one comes up with it.
+const ADDED = 'sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=100';
+
+// A movie or TV library's "all" listing opens with Recently Played and Recently Added folders.
+// Shows are listed by episode, so each entry says where you are in the show, or what's new in it.
+function recentFolders(path, viewGroup) {
   const id = /^\/library\/sections\/(\w+)\/all$/.exec(path);
   const type = { movie: 1, show: 4 }[viewGroup];
   if (!id || !type) return null;
-  return { title: 'Recently Played', icon: 'history', key: `/library/sections/${id[1]}/all?type=${type}&${RECENT}` };
+  const all = `/library/sections/${id[1]}/all?type=${type}&`;
+  return [
+    { title: 'Recently Played', icon: 'history', key: all + RECENT },
+    { title: 'Recently Added', icon: 'calendarPlus', key: all + ADDED }
+  ];
 }
 
 // One card per show, its latest episode, under the show's name and poster: episode stills are 16:9.
@@ -97,6 +105,7 @@ const ICONS = {
   history: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
   play: lucide('<polygon points="6 3 20 12 6 21 6 3"/>'),
   rotateCcw: lucide('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'),
+  calendarPlus: lucide('<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/>'),
   check: lucide('<path d="M20 6 9 17l-5-5"/>'),
   captions: lucide('<rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/>'),
   server: lucide('<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/>')
@@ -1318,4 +1327,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT, ADDED };

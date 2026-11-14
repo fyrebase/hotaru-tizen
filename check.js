@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolder, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -61,15 +61,18 @@ assert.deepEqual(
   ['https://local', 'http://10.0.0.2:32400', 'https://remote', 'https://relay']
 );
 
-// Movie and TV libraries open on Recently Played; not inside the folder itself, nor in a show's seasons.
-const tv = recentFolder('/library/sections/2/all', 'show');
-assert.equal(tv.key, '/library/sections/2/all?type=4&' + RECENT);
-assert.ok(recentFolder('/library/sections/1/all', 'movie').key.includes('type=1&'));
-assert.equal(recentFolder('/library/sections/3/all', 'artist'), null);
-assert.equal(recentFolder(tv.key, 'show'), null);
-assert.equal(recentFolder('/library/metadata/7/children', 'show'), null);
+// Movie and TV libraries open on Recently Played and Recently Added; not inside either folder, nor in a show's seasons.
+const tv = recentFolders('/library/sections/2/all', 'show');
+assert.equal(tv[0].key, '/library/sections/2/all?type=4&' + RECENT);
+assert.equal(tv[1].key, '/library/sections/2/all?type=4&' + ADDED);
+assert.ok(recentFolders('/library/sections/1/all', 'movie')[1].key.includes('type=1&'));
+assert.equal(recentFolders('/library/sections/3/all', 'artist'), null);
+assert.equal(recentFolders(tv[0].key, 'show'), null);
+assert.equal(recentFolders(tv[1].key, 'show'), null);
+assert.equal(recentFolders('/library/metadata/7/children', 'show'), null);
 // The filter survives url() re-encoding the query.
-assert.equal(new URL(url(tv.key)).searchParams.get('lastViewedAt>>'), '0');
+assert.equal(new URL(url(tv[0].key)).searchParams.get('lastViewedAt>>'), '0');
+assert.equal(new URL(url(tv[1].key)).searchParams.get('sort'), 'addedAt:desc');
 
 const ep = (show, title) => ({ title, grandparentRatingKey: show, grandparentTitle: 'Show ' + show, grandparentThumb: '/t/' + show });
 const once = oneEachShow([ep('1', 'a'), { title: 'Movie' }, ep('1', 'b'), ep('2', 'c')]);
