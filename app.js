@@ -316,7 +316,14 @@ function render(page) {
   grid.classList.toggle('indexed', indexed);
   $('search').hidden = !indexed;
   $('search').value = '';
+  // All of a show's episodes come in season order, each season under its name.
+  const allEps = /\/allLeaves$/.test(page.key || '');
+  let season;
   items.forEach((item) => {
+    if (allEps && item.parentIndex !== season) {
+      season = item.parentIndex;
+      grid.append(el('div', 'season-head', item.parentTitle || 'Season ' + season));
+    }
     // A show's or season's episodes show their 16:9 stills; Recently Played keeps to posters.
     const wide = d.about && item.type === 'episode';
     const card = el('button', wide ? 'card wide' : 'card');
