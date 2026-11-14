@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Hotaru</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Anton+SC&display=swap">
+<!-- As print until it loads, so a slow or missing network doesn't hold up the first paint. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Anton+SC&display=swap" media="print" onload="this.media='all'">
 <style>
   /* No grid, flex gap, aspect-ratio or inset: Tizen 4 runs Chromium 56. */
   html, body { margin: 0; height: 100%; overflow: hidden; background: #141416; }
@@ -178,6 +179,10 @@
      shows it under the pointer: open and green when watched, closed and dim when not, on a
      raised key. Holding OK opens the menu that flips it. */
   .card { position: relative; }
+  /* A windowed grid (virtualGrid() in app.js): a box as tall as all its cards, each placed in it
+     by its row and column, so only those near view need be in the page. */
+  .virtual { flex: 0 0 100%; position: relative; }
+  .virtual .card { position: absolute; }
   .corner {
     position: absolute; top: 12px; right: 12px; z-index: 3; width: 48px; height: 48px; box-sizing: border-box;
     padding: 8px; border: 1px solid transparent; border-radius: 10px; opacity: 0; transition: opacity .15s;
@@ -504,8 +509,6 @@
   <div id="spinner"><i></i></div>
   <div id="menu" hidden><div id="menu-art"></div><div id="menu-title" class="dim"></div><div id="menu-list"></div></div>
 
-  <!-- Only for desktop browsers without native HLS; the TV plays HLS itself. -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

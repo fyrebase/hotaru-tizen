@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, upNext, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, windowOf, sameColumn, parseCues, cuesAt, cueSpan, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -148,6 +148,25 @@ assert.equal(cuesAt(cues, 3600), 'Up top');
 cues = parseCues('WEBVTT\n\nNOTE made by hand\n\n00:05.000 --> 00:07.250 align:start\nHello\n\n00:06.000 --> 00:08.000\nThere\n');
 assert.equal(cuesAt(cues, 6.5), 'Hello\nThere');
 assert.equal(cuesAt(cues, 7.5), 'There');
+// A windowed grid: whole rows, a screen either side of the one showing, kept within the list.
+assert.deepEqual(windowOf(0, 960, 620, 6, 324), [0, 24]);
+assert.deepEqual(windowOf(6200, 960, 620, 6, 324), [48, 84]);
+assert.equal(windowOf(40000, 960, 620, 6, 324)[1], 324);
+// Paging past either end lands in the same column: its top, or its last card in a short last row.
+assert.equal(sameColumn(-8, 6, 20), 4);
+assert.equal(sameColumn(16, 6, 20), 16);
+assert.equal(sameColumn(23, 6, 20), 17);
+assert.equal(sameColumn(1 + 20 * 6, 6, 20), 19);
+
+// Within a span the same cues show, and they change at its start.
+assert.deepEqual(cueSpan([], 5), [-Infinity, Infinity]);
+for (const t of [0, 6.5, 7.5, 31, 33.7, 3600]) {
+  const [from, to] = cueSpan(cues, t);
+  assert.ok(from <= t && t < to);
+  if (from > -Infinity) assert.equal(cuesAt(cues, from), cuesAt(cues, t));
+  if (to < Infinity) assert.equal(cuesAt(cues, (t + to) / 2), cuesAt(cues, t));
+  if (from > 0) assert.notEqual(cuesAt(cues, from - 0.001), cuesAt(cues, t));
+}
 
 // Plex's text subtitle tracks, each with its file; embedded and image tracks left out.
 const full = {
@@ -239,7 +258,30 @@ assert.ok(watched(season) && season.viewOffset === 0);
 setWatched(season, false);
 assert.equal(season.viewedLeafCount, 0);
 
-console.log('ok');
+// The episode after a finished one is looked up in its season, and in the whole show only after
+// the season's last. A stand-in for Plex: season 5 holds episodes 1 and 2, the show a 3 after.
+(async () => {
+  const asked = [];
+  global.fetch = async (href) => {
+    const path = new URL(href).pathname;
+    asked.push(path);
+    const season = [{ ratingKey: '1' }, { ratingKey: '2' }];
+    return { ok: true, json: async () => ({ MediaContainer: { Metadata: path.endsWith('/children') ? season : season.concat({ ratingKey: '3', grandparentTitle: 'Show', title: 'Opener' }) } }) };
+  };
+  const done = (ratingKey) => ({ ratingKey, parentRatingKey: '5', grandparentRatingKey: '9', viewCount: 1, thumb: '/t', label: 'Show' });
+  assert.equal((await upNext(done('1'))).ratingKey, '2');
+  assert.deepEqual(asked, ['/library/metadata/5/children']);
+  const opener = await upNext(done('2'));
+  assert.deepEqual([opener.ratingKey, opener.sub, opener.label], ['3', 'Next: Opener', 'Show']);
+  assert.deepEqual(asked.slice(1), ['/library/metadata/5/children', '/library/metadata/9/allLeaves']);
+  // Part way through, it stays put, and nothing is asked.
+  assert.equal((await upNext(Object.assign(done('1'), { viewOffset: 5 }))).ratingKey, '1');
+  assert.equal(asked.length, 3);
+  console.log('ok');
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
 
 // A person's dates from Plex Discover, the day kept whatever the clock's time zone.
 const life = lifeLine({ bornAt: '1979-04-04', diedAt: '2008-01-22', birthPlace: ' Perth, Western Australia, Australia' });

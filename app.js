@@ -38,11 +38,12 @@ async function list(path) {
 // A finished episode's card moves on to the episode after it, so OK plays what's next rather than
 // the end credits again. An episode part way through, even a rewatch, stays put and resumes.
 // One lookup per finished show, all at once; a failed one, or the show's last episode, leaves
-// the card as it was.
+// the card as it was. The lookup is of the episode's season, a dozen or so episodes; only after
+// a season's last is it of the whole show, hundreds for a long one, as the Mac app always asks.
 async function upNext(ep) {
   if (!ep.grandparentRatingKey || !ep.viewCount || ep.viewOffset) return ep;
-  const eps = await list(`/library/metadata/${ep.grandparentRatingKey}/allLeaves`).catch(() => []);
-  const next = nextAfter(eps, ep);
+  const eps = (path) => list('/library/metadata/' + path).catch(() => []);
+  const next = (ep.parentRatingKey && nextAfter(await eps(ep.parentRatingKey + '/children'), ep)) || nextAfter(await eps(ep.grandparentRatingKey + '/allLeaves'), ep);
   if (!next) return ep;
   return Object.assign(next, { thumb: ep.thumb, label: ep.label, sub: 'Next: ' + heading(next)[1] });
 }
@@ -446,8 +447,16 @@ async function show(page) {
   // A person's name heads their bio instead (personBlock()).
   $('title').textContent = page.person ? '' : page.title;
   status('');
-  $('grid').classList.remove('in');
+  const grid = $('grid');
+  grid.classList.remove('in');
   backdrop(null);
+  if (page.data && page.changes === changes && Date.now() - page.loaded < FRESH) {
+    // Clear at once, not faded out, so render() fades the page in from nothing.
+    grid.style.transition = 'none';
+    void grid.offsetWidth;
+    grid.style.transition = '';
+    return render(page);
+  }
   busy(true);
   try {
     page.data = page.person ? await loadPerson(page) : page.key ? await load(page.key) : await home();
@@ -455,9 +464,18 @@ async function show(page) {
     await busy(false);
     return status(e.message);
   }
+  page.loaded = Date.now();
+  page.changes = changes;
   await busy(false);
   render(page);
 }
+
+// Back shows a page from what it fetched before, without asking Plex again: a library's listing
+// is megabytes to fetch and parse. Only while nothing has been played or marked here since
+// (`changes`), which a page's counts and Continue Watching follow, and for FRESH ms, so what
+// other people add or watch turns up.
+const FRESH = 5 * 60000;
+let changes = 0;
 
 // The spinner over whatever is loading, a page or the video (DESIGN.md): only once the load has
 // taken 0.3s, so a quick one doesn't flash it, and then up for 0.9s at least. The first page
@@ -490,7 +508,10 @@ async function busy(on) {
 // The show's or movie's art, faint behind its page, fading in once it has loaded.
 function backdrop(art) {
   const img = $('backdrop');
-  const src = art ? url('/photo/:/transcode', { width: 1920, height: 1080, minSize: 1, url: art }) : '';
+  // Full size on the home page, where it shows at 60%; behind any other page it's at 15%, where
+  // half size looks the same and is a quarter as much to decode.
+  const w = $('browse').classList.contains('home') ? 1920 : 960;
+  const src = art ? url('/photo/:/transcode', { width: w, height: (w * 9) / 16, minSize: 1, url: art }) : '';
   if (img.getAttribute('src') === src || (!src && !img.hasAttribute('src'))) return;
   img.classList.remove('in');
   if (src) img.src = src;
@@ -526,11 +547,14 @@ function later(img, src) {
 }
 
 // A card for `item`: its poster, or with `wide` its 16:9 still, its title and a line under it.
-function cardFor(item, wide) {
+// `now`: its art loads at once, as in a windowed grid, which holds only the cards near view.
+function cardFor(item, wide, now) {
   const card = el('button', wide ? 'card wide' : 'card');
   const img = new Image();
   img.onload = () => img.classList.add('in');
-  if (item.thumb) later(img, wide ? still(item.thumb) : poster(item.thumb));
+  const src = item.thumb && (wide ? still(item.thumb) : poster(item.thumb));
+  if (src && now) img.src = src;
+  else if (src) later(img, src);
   const art = el('div', 'art');
   if (item.icon) art.innerHTML = ICONS[item.icon];
   else art.append(img);
@@ -547,8 +571,8 @@ function cardFor(item, wide) {
   card.onclick = () => open(item);
   card.item = item;
   if (canMarkWatched(item)) {
+    // Drawn as the card takes focus (boot()): the only time it shows, and a library is 1,500 cards.
     card.append(el('i', 'corner'));
-    drawEye(card, item);
     card.hold = () => cardMenu(item, card);
   }
   return card;
@@ -621,6 +645,7 @@ function render(page) {
   const d = page.data;
   if (nearView) [nearView, farView].forEach((o) => o.disconnect());
   grid.innerHTML = '';
+  virt = null;
   // A person's page has no title, search or seasons to head it, so it starts at the screen's top.
   $('browse').classList.toggle('headless', !!d.person);
   grid.scrollTop = 0;
@@ -630,7 +655,8 @@ function render(page) {
   if (d.about) grid.append(aboutBlock(d.about));
   if (d.person) grid.append(personBlock(d.person));
   if (d.person && d.items.length) grid.append(el('div', 'season-head films-head', 'In your library'));
-  // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
+  // ponytail: every item fetched at once, though only those near view get cards (virtualGrid());
+  // page with X-Plex-Container-Size if a big library's listing is slow to arrive.
   const items = d.items;
   // A library's whole listing gets the letter strip down its side and the search in the header.
   const indexed = /^\/library\/sections\/\w+\/all$/.test(page.key || '');
@@ -640,18 +666,15 @@ function render(page) {
   // All of a show's episodes come in season order, each season under its name.
   const allEps = /\/allLeaves$/.test(page.key || '');
   let season;
-  items.forEach((item) => {
+  // A page of nothing but cards, a library or a folder in one, is windowed.
+  if (!d.about && !d.person && !d.shelves && items.length) virtualGrid(grid, items, indexed);
+  else items.forEach((item) => {
     if (allEps && item.parentIndex !== season) {
       season = item.parentIndex;
       grid.append(el('div', 'season-head', item.parentTitle || 'Season ' + season));
     }
     // A show's or season's episodes show their 16:9 stills; Recently Played keeps to posters.
-    const card = cardFor(item, d.about && item.type === 'episode');
-    if (indexed && item.ratingKey) {
-      card.dataset.letter = letterOf(item);
-      card.dataset.find = fold(item.title + ' ' + (item.originalTitle || ''));
-    }
-    grid.append(card);
+    grid.append(cardFor(item, d.about && item.type === 'episode'));
   });
   // Home: under the libraries, a row each for what's partway through and what's new.
   (d.shelves || []).forEach((shelf) => {
@@ -666,16 +689,21 @@ function render(page) {
   if (d.person) {
     d.person.credits.forEach((g) => g.Credit && g.Credit.length && grid.append(el('div', 'season-head', g.title), creditList(g, d.items)));
   }
-  if (indexed) filter();
+  if (virt && indexed) filter();
   else letters(false);
+  if (virt && !indexed) virtDraw();
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
   // A page opens on its first card, or with none, a movie's Play; Back returns to where it was,
   // scrolled as it was at once, not scrolled from the top while the page fades in.
-  const first = page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0];
-  if (page.at >= 0 && page.scroll >= 0) {
+  const back = page.at >= 0 && page.scroll >= 0;
+  if (back) {
     grid.scrollTop = page.scroll;
-    focusStill(first);
-  } else if (d.person && !(page.at >= 0)) focusStill(first); // a person's page opens at its top, bio first
+    if (virt) virtSync(page.scroll);
+  }
+  const was = (virt && page.item != null && virtCard(page.item)) || focusables()[page.at];
+  const first = page.at >= 0 ? was : (virt ? virtCard(0) : grid.querySelector('.card')) || focusables()[0];
+  if (back) focusStill(first);
+  else if (d.person && !(page.at >= 0)) focusStill(first); // a person's page opens at its top, bio first
   else focusCard(first);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
@@ -777,8 +805,10 @@ function face(r, cls) {
   if (r.thumb) {
     const img = new Image();
     img.onload = () => img.classList.add('in');
-    // Sized for the person's page; the row's smaller circles share the one download.
-    img.src = url('/photo/:/transcode', { width: 600, height: 600, minSize: 1, url: r.thumb });
+    // At the size shown, 140px in a row and 300px on the person's page: a row can be 50 people,
+    // and the TV holds each photo decoded.
+    const px = cls === 'face' ? 140 : 300;
+    img.src = url('/photo/:/transcode', { width: px, height: px, minSize: 1, url: r.thumb });
     box.append(img);
   }
   return box;
@@ -803,16 +833,17 @@ function letterOf(item) {
 }
 
 // The strip down a library's side: "#" and A to Z, each with titles a button that jumps to the
-// first of them, the rest dim. `firsts`: each letter's first card, or false for no strip.
+// first of them, the rest dim. `firsts`: each letter's first card's place in the list, or false
+// for no strip.
 function letters(firsts) {
   const strip = $('letters');
   strip.innerHTML = '';
   strip.hidden = !firsts;
   if (!firsts) return;
   '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach((l) => {
-    const b = el(firsts[l] ? 'button' : 'span', '', l);
+    const b = el(firsts[l] != null ? 'button' : 'span', '', l);
     b.dataset.letter = l;
-    if (firsts[l]) b.onclick = () => focusCard(firsts[l]);
+    if (firsts[l] != null) b.onclick = () => focusCard(virtCard(firsts[l]));
     strip.append(b);
   });
 }
@@ -832,19 +863,99 @@ const fold = (s) =>
 // of Us", "s" doesn't), all of them when it's empty, and rebuilds the strip from what shows:
 // each letter's first card, Plex listing them in sort order.
 function filter() {
+  const v = virt;
+  if (!v) return;
   const q = fold($('search').value.trim());
+  v.shown = q ? v.all.filter((e) => matchesWord(e.find, q)) : v.all;
   const firsts = {};
-  let matches = 0;
-  Array.from($('grid').querySelectorAll('.card')).forEach((c) => {
-    c.hidden = !!q && !matchesWord(c.dataset.find || '', q);
-    if (c.hidden) return;
-    matches++;
-    const l = c.dataset.letter;
-    if (l) firsts[l] = firsts[l] || c;
+  v.shown.forEach((e, i) => {
+    if (e.letter && firsts[e.letter] == null) firsts[e.letter] = i;
   });
   letters(firsts);
-  status(matches ? '' : 'No titles match');
+  status(v.shown.length ? '' : 'No titles match');
   $('grid').scrollTop = 0;
+  virtDraw();
+}
+
+// A page of nothing but cards keeps in the page only those within a screen of what shows, or of
+// where the page is scrolling to. Every card there costs the TV on each D-pad press: with a
+// library's 324, a press took 140 ms to draw, against 25 ms on the home page's 32. The cards sit
+// in a box as tall as them all, each placed by its row and column, all being one size, so any
+// can be there without the rest. `shown` is the list as the search leaves it, each entry
+// { item, letter, find }; `cards` those in the page, by their place in `shown` (card.nth).
+let virt = null; // { box, all, shown, cards, cols, rowH, target }
+function virtualGrid(grid, items, indexed) {
+  const all = items.map((item) => {
+    const filed = indexed && !!item.ratingKey;
+    return { item: item, letter: filed ? letterOf(item) : '', find: filed ? fold(item.title + ' ' + (item.originalTitle || '')) : '' };
+  });
+  virt = { box: el('div', 'virtual'), all: all, shown: all, cards: {}, target: 0 };
+  grid.append(virt.box);
+  virtMeasure();
+}
+
+// How many cards to a row and how tall a row is, from a card: the stylesheet decides both.
+function virtMeasure() {
+  const v = virt;
+  const probe = v.box.appendChild(cardFor(v.all[0].item, false, true));
+  v.cols = Math.max(1, Math.round(v.box.clientWidth / (probe.offsetWidth + 32)));
+  v.rowH = probe.offsetHeight + 32;
+  probe.remove();
+}
+
+// The cards anew, after the search or the measurements change.
+function virtDraw() {
+  const v = virt;
+  Object.keys(v.cards).forEach((i) => v.cards[i].remove());
+  v.cards = {};
+  v.box.style.height = Math.ceil(v.shown.length / v.cols) * v.rowH + 'px';
+  virtSync($('grid').scrollTop);
+}
+
+// The card `nth` in the list, made if it isn't in the page.
+function virtCard(nth) {
+  const v = virt;
+  const e = v.shown[nth];
+  if (!e) return null;
+  if (!v.cards[nth]) {
+    const card = (v.cards[nth] = cardFor(e.item, false, true));
+    card.nth = nth;
+    if (e.letter) card.dataset.letter = e.letter;
+    card.style.left = (100 / v.cols) * (nth % v.cols) + '%';
+    card.style.top = Math.floor(nth / v.cols) * v.rowH + 'px';
+    v.box.append(card);
+  }
+  return v.cards[nth];
+}
+
+// The cards to have with the page scrolled to `top`, as [from, to) in the list: the rows on a
+// screen `h` tall, and a screen's worth above and below.
+const windowOf = (top, h, rowH, cols, n) => [Math.max(0, Math.floor((top - h) / rowH)) * cols, Math.min(n, Math.ceil((top + 2 * h) / rowH) * cols)];
+
+// Brings the page's cards in line with where it's scrolled, and with `target`, where it's about
+// to be: a smooth scroll takes a while to get there, and focus moves on before it does. The
+// focused card stays whatever happens.
+function virtSync(target) {
+  const v = virt;
+  const grid = $('grid');
+  if (target != null) v.target = Math.max(0, Math.min(target, grid.scrollHeight - grid.clientHeight));
+  const want = {};
+  [grid.scrollTop, v.target].forEach((top) => {
+    const w = windowOf(top, grid.clientHeight, v.rowH, v.cols, v.shown.length);
+    for (let i = w[0]; i < w[1]; i++) want[i] = true;
+  });
+  Object.keys(v.cards).forEach((i) => {
+    if (want[i] || v.cards[i] === document.activeElement) return;
+    v.cards[i].remove();
+    delete v.cards[i];
+  });
+  Object.keys(want).forEach((i) => virtCard(Number(i)));
+}
+
+// `nth` moved by whole rows back into a list of `n`, in its column: its top or its last card.
+function sameColumn(nth, cols, n) {
+  if (nth < 0) return ((nth % cols) + cols) % cols;
+  return nth < n ? nth : nth - Math.ceil((nth - n + 1) / cols) * cols;
 }
 
 // Lights the strip's letter for the card in focus, so it shows where in the list you are.
@@ -895,7 +1006,10 @@ function focusCard(card, now) {
   const g = grid.getBoundingClientRect();
   // Where the card's foot would be with the page at its top.
   const footAtTop = r.bottom - g.top + grid.scrollTop;
-  if (footAtTop > grid.clientHeight || shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= r.top)) {
+  // Below the top row: the page's first button, which is in it, ends above this one. A windowed
+  // grid's first card may not be in the page, so there it's by the card's place in the list.
+  const lower = virt && card.nth != null ? card.nth >= virt.cols : grid.querySelector('button:not([hidden])').getBoundingClientRect().bottom <= r.top;
+  if (footAtTop > grid.clientHeight || lower) {
     scrollGrid(grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2), now);
   } else scrollGrid(0, now);
 }
@@ -904,13 +1018,20 @@ function focusCard(card, now) {
 // scrollIntoView({ block: 'center' }): Chromium 56 has neither 'center' nor Element.scrollTo.
 function scrollGrid(top, now) {
   const grid = $('grid');
+  if (virt) virtSync(top);
   if (grid.scrollTo && !now) grid.scrollTo({ top: top, behavior: 'smooth' });
   else grid.scrollTop = top;
 }
 
+// The list's first card, to return to from the search.
+const firstCard = () => (virt ? virtCard(0) : shown('#grid button')[0]);
+
 // Where a page was left, for coming back to it: what had focus, and how far it was scrolled.
 function remember(page) {
-  page.at = focusables().indexOf(document.activeElement);
+  const cur = document.activeElement;
+  page.at = focusables().indexOf(cur);
+  // A windowed grid's card by its place in the list, as which cards are in the page changes.
+  page.item = virt && cur.nth != null ? cur.nth : null;
   page.scroll = $('grid').scrollTop;
 }
 
@@ -931,7 +1052,7 @@ function back() {
   if (!$('search').hidden && $('search').value) {
     $('search').value = '';
     filter();
-    return focusCard(shown('#grid button')[0]);
+    return focusCard(firstCard());
   }
   if (stack.length > 1) {
     stack.pop();
@@ -1091,7 +1212,10 @@ function stop() {
   // fetching it again: cleared past about 90%, where Plex marks it watched.
   const it = playing.item;
   const ms = v.currentTime * 1000;
-  if (ms > 0) it.viewOffset = it.duration && ms > 0.9 * it.duration ? 0 : ms;
+  if (ms > 0) {
+    it.viewOffset = it.duration && ms > 0.9 * it.duration ? 0 : ms;
+    changes++;
+  }
   if (playing.hls) playing.hls.destroy();
   v.removeAttribute('src');
   v.load();
@@ -1271,23 +1395,40 @@ const cueTime = (s) =>
   s.trim().replace(',', '.').split(':').reverse().reduce((t, part, i) => t + parseFloat(part) * [1, 60, 3600][i], 0);
 
 // The text showing `t` seconds in, cues that overlap one above the other.
-// ponytail: scans every cue, ~1,500 in a film, each frame. Binary search on start if it shows.
+// ponytail: scans every cue, ~1,500 in a film, but only as playback passes a cue's start or end
+// (cueSpan()). Binary search on start if it shows.
 const cuesAt = (cues, t) =>
   cues
     .filter((c) => c.start <= t && t < c.end)
     .map((c) => c.text)
     .join('\n');
 
+// The stretch around `t`, as [from, to), over which the same cues show: from the last start or
+// end at or before `t` to the first after it.
+function cueSpan(cues, t) {
+  let from = -Infinity;
+  let to = Infinity;
+  cues.forEach((c) =>
+    [c.start, c.end].forEach((x) => {
+      if (x <= t) from = Math.max(from, x);
+      else to = Math.min(to, x);
+    })
+  );
+  return [from, to];
+}
+
 // Each frame while `p` plays: timeupdate comes only about every 250 ms, too coarse for subtitles.
+// A frame within the stretch last drawn, of the same track, has nothing to do.
 function drawSubtitles(p) {
   if (playing !== p) return;
-  const text = cuesAt(p.cues, $('video').currentTime);
-  const box = $('subs');
-  if (box.textContent !== text) {
-    box.textContent = text;
-    box.hidden = !text;
-  }
   requestAnimationFrame(() => drawSubtitles(p));
+  const t = $('video').currentTime;
+  const d = p.drawn;
+  if (d && d.cues === p.cues && t >= d.span[0] && t < d.span[1]) return;
+  p.drawn = { cues: p.cues, span: cueSpan(p.cues, t) };
+  const text = cuesAt(p.cues, t);
+  $('subs').textContent = text;
+  $('subs').hidden = !text;
 }
 
 // The Mac app's eye in a card's corner, shown on the focused card as the Mac shows it under the
@@ -1330,6 +1471,7 @@ function cardMenu(item, card) {
 function markWatched(item, on, card) {
   closeMenu();
   setWatched(item, on);
+  changes++;
   drawEye(card, item);
   const href = url('/:/' + (on ? 'scrobble' : 'unscrobble'), { identifier: 'com.plexapp.plugins.library', key: item.ratingKey });
   fetch(href)
@@ -1871,7 +2013,7 @@ function onKey(e) {
   if (e.target === $('search')) {
     if (k === 'down' || (k === 'back' && e.keyCode !== 8)) {
       e.preventDefault();
-      focusCard(shown('#grid button')[0]);
+      focusCard(firstCard());
     }
     return;
   }
@@ -1918,6 +2060,22 @@ function skipPage(dir, end) {
   const g = grid.getBoundingClientRect();
   const offScreen = from.bottom <= g.top || from.top >= g.bottom;
   if (!end && (!onCard || offScreen)) return move(dir, true);
+  // In a windowed grid the card a screen away, or at the end, needn't be in the page, so it's
+  // found by its place in the list.
+  if (virt && onCard && cur.nth != null) {
+    const c = virt.cols;
+    const n = virt.shown.length;
+    if (end) {
+      focusStill(virtCard(dir === 'down' ? sameColumn(cur.nth + n * c, c, n) : cur.nth % c));
+      return scrollGrid(dir === 'down' ? grid.scrollHeight : 0, true);
+    }
+    const rows = Math.max(1, Math.round(grid.clientHeight / virt.rowH));
+    const to = sameColumn(cur.nth + (dir === 'down' ? rows : -rows) * c, c, n);
+    if (to === cur.nth) return move(dir, true);
+    focusStill(virtCard(to));
+    grid.scrollTop += ((to - cur.nth) / c) * virt.rowH;
+    return virtSync(grid.scrollTop);
+  }
   // The card in the focused one's column a screen away, or at the end, the first or last.
   const x = from.left + from.width / 2;
   const want = from.top + (dir === 'down' ? 1 : -1) * grid.clientHeight;
@@ -1942,12 +2100,15 @@ function skipPage(dir, end) {
 }
 
 // The time of day in the header and the playing overlay, in the TV's own format: "9:41 PM" or
-// "21:41". Checked each second, so it turns over with the minute.
+// "21:41". Checked each second, so it turns over with the minute, and formatted only then:
+// toLocaleTimeString is slow on the TV.
+let minute;
 function tick() {
+  const m = Math.floor(Date.now() / 60000);
+  if (m === minute) return;
+  minute = m;
   const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  ['clock', 'osd-clock'].forEach((id) => {
-    if ($(id).textContent !== now) $(id).textContent = now;
-  });
+  $('clock').textContent = $('osd-clock').textContent = now;
 }
 
 function boot() {
@@ -1966,13 +2127,30 @@ function boot() {
   document.addEventListener('keyup', onKeyUp);
   $('grid').addEventListener('focusin', lightLetter);
   $('grid').addEventListener('focusin', homeArt);
+  $('grid').addEventListener('focusin', (e) => e.target.hold && drawEye(e.target, e.target.item));
   $('search').addEventListener('input', filter);
+  $('grid').addEventListener('scroll', () => virt && virtSync());
+  // A window resized on a desktop changes how many cards fit a row; the TV's keyboard only the
+  // page's height.
+  addEventListener('resize', () => {
+    if (!virt) return;
+    const nth = document.activeElement.nth;
+    virtMeasure();
+    virtDraw();
+    if (nth != null) focusStill(virtCard(nth));
+  });
   $('backdrop').onload = () => $('backdrop').classList.add('in');
   $('osd-poster').onload = () => $('osd-poster').classList.add('in');
   tick();
   setInterval(tick, 1000);
   const v = $('video');
-  v.ontimeupdate = time;
+  // hls.js only where the browser can't play HLS itself: the TV can, and is spared fetching and
+  // parsing it at every start.
+  if (!v.canPlayType('application/vnd.apple.mpegurl')) {
+    document.head.appendChild(el('script')).src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+  }
+  // osd() draws the time as the overlay comes up; hidden, it needn't keep up.
+  v.ontimeupdate = () => $('osd').classList.contains('in') && time();
   v.onended = stop;
   v.onplaying = () => {
     busy(false);
@@ -1994,4 +2172,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, upNext, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, windowOf, sameColumn, parseCues, cuesAt, cueSpan, textStreams, rankFound, oldestSubtitle, keepSubtitles, resumable, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };
