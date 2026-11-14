@@ -649,6 +649,7 @@ function render(page) {
   virt = null;
   // A person's page has no title, search or seasons to head it, so it starts at the screen's top.
   $('browse').classList.toggle('headless', !!d.person);
+  $('browse').classList.toggle('detail', !!d.about);
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
   theme(d.about && (d.about.theme || d.about.parentTheme));
@@ -1709,11 +1710,11 @@ const CARD_PREFS = [
   // ponytail: still saved as cardEdge, from when it was the edges alone, so it keeps its setting.
   { name: 'cardEdge', label: 'Lit edges and shadows', detail: 'A rim of light along the top of each card, and a soft shadow under it.', def: 1, min: 0, max: 1, toggle: true }
 ];
-const PLAYER_PREFS = [
-  { name: 'pausedOverlay', label: 'Overlay when paused', detail: 'How long the title and seek bar stay up after pausing.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
 const HOME_PREFS = [
   { name: 'homeArt', label: 'Background art', detail: 'Art from the focused library or show behind the home page.', def: 1, min: 0, max: 1, toggle: true }
 ];
+const PLAYER_PREFS = [
+  { name: 'pausedOverlay', label: 'Overlay when paused', detail: 'How long the title and seek bar stay up after pausing.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
 ];
 const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS, HOME_PREFS, PLAYER_PREFS).filter((p) => p.name === name)[0];
 
@@ -1798,13 +1799,13 @@ function generalPage(page) {
   head.append(el('div', '', 'Card effects'), el('div', 'dim', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.'));
   page.append(head);
   prefRows(page, CARD_PREFS);
-}
-// The Mac's: a sample over a stand-in for a bright picture, then the settings.
   const home = el('div', 'group');
   home.style.paddingTop = '32px';
   home.append(el('div', '', 'Home'));
   page.append(home);
   prefRows(page, HOME_PREFS);
+}
+// The Mac's: a sample over a stand-in for a bright picture, then the settings.
 function subtitlesPage(page) {
   const sample = el('div', 'sample');
   sample.append(el('span', 'subs-box', 'Subtitles will look like this,\nover one line or two.'));
