@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, RECENT, ADDED } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -202,3 +202,9 @@ setWatched(season, false);
 assert.equal(season.viewedLeafCount, 0);
 
 console.log('ok');
+
+// A person's dates from Plex Discover, the day kept whatever the clock's time zone.
+const life = lifeLine({ bornAt: '1979-04-04', diedAt: '2008-01-22', birthPlace: ' Perth, Western Australia, Australia' });
+assert.ok(/^Born .*4.* 1979 in Perth, Western Australia, Australia · Died .*22.* 2008$/.test(life), life);
+assert.equal(lifeLine({ birthPlace: 'Boston' }), 'Born in Boston');
+assert.equal(lifeLine({}), '');

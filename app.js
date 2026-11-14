@@ -2,7 +2,9 @@
 // No build step, so the syntax has to run on Tizen 4's Chromium 56: no `?.`, `??`, object
 // spread, `.at()`, or trailing commas in calls.
 
-const cfg = { server: '', name: '', token: '' };
+// `account`: the account's own token, for plex.tv's metadata (a person's bio), which doesn't
+// take the server's token when the server is shared.
+const cfg = { server: '', name: '', token: '', account: '' };
 // boot() gives each install its own identifier, which plex.tv lists as a device of the account.
 const CLIENT = { 'X-Plex-Client-Identifier': 'hotaru-tv', 'X-Plex-Product': 'Hotaru' };
 const PLEX_TV = 'https://plex.tv/api/v2';
@@ -342,14 +344,64 @@ async function load(path) {
   return { items: both[0], about: about, seasons: seasons && seasons.filter((s) => s.type === 'season') };
 }
 
+// A person's page: their bio from Plex's online metadata, over their films in the library the
+// movie came from. The bio is left out when it can't be had: no account token from an older
+// sign-in, or plex.tv not answering. Plex Discover isn't documented: this is how Plex's web app
+// asks it, as Plezy (github.com/edde746/plezy) captured, by the cast entry's tagKey. The server's
+// own /library/people/<id> has no bio.
+async function loadPerson(page) {
+  const r = page.person;
+  const bio = cfg.account && r.tagKey
+    ? getJson(withParams('https://discover.provider.plex.tv/library/people/' + r.tagKey, { 'X-Plex-Token': cfg.account }))
+      .then((j) => (j.MediaContainer.Metadata || [])[0] || {}, () => ({}))
+    : Promise.resolve(null);
+  const films = list('/library/sections/' + page.section + '/all?' + (r.filter || 'actor=' + r.id)).catch(() => []);
+  const both = await Promise.all([films, bio]);
+  return { items: both[0], person: { role: r, bio: both[1] } };
+}
+
+function openPerson(r, about) {
+  const top = stack[stack.length - 1];
+  top.at = focusables().indexOf(document.activeElement);
+  stack.push({ title: r.tag, person: r, section: about.librarySectionID });
+  show(stack[stack.length - 1]);
+}
+
+// The head of a person's page, laid out as a movie's details: their photo where the poster goes,
+// then the part they played in the movie they were opened from, and the bio.
+function personBlock(p) {
+  const box = el('div', 'about');
+  box.append(face(p.role, 'face big'));
+  const text = el('div', 'about-text');
+  text.append(el('div', 'person-name', p.role.tag));
+  if (p.role.role) text.append(el('div', 'dim', 'As ' + p.role.role));
+  if (p.bio && lifeLine(p.bio)) text.append(el('div', 'dim', lifeLine(p.bio)));
+  // The whole bio, however long. The page opens at its top, the first film card being its first
+  // focusable (focusCard()).
+  if (p.bio && p.bio.summary) text.append(el('div', 'bio', noOrphan(p.bio.summary)));
+  if (!p.bio) text.append(el('div', 'dim', 'Sign in again, under Settings, Plex, to show biographies.'));
+  box.append(text);
+  return box;
+}
+
+// "Born 5 June 1971 in Boston, Massachusetts, USA", and when they died; Plex Discover's dates
+// are "1971-06-05". In the TV's own language and date order, read as UTC so the day stays put.
+function lifeLine(bio) {
+  const day = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const place = (bio.birthPlace || '').trim();
+  const born = bio.bornAt ? 'Born ' + day(bio.bornAt) + (place ? ' in ' + place : '') : place && 'Born in ' + place;
+  return [born, bio.diedAt && 'Died ' + day(bio.diedAt)].filter(Boolean).join(' · ');
+}
+
 async function show(page) {
   $('logo').hidden = page !== stack[0];
-  $('title').textContent = page.title;
+  // A person's name heads their bio instead (personBlock()).
+  $('title').textContent = page.person ? '' : page.title;
   status('');
   $('grid').classList.remove('in');
   backdrop(null);
   try {
-    page.data = page.key ? await load(page.key) : { items: await sections() };
+    page.data = page.person ? await loadPerson(page) : page.key ? await load(page.key) : { items: await sections() };
   } catch (e) {
     return status(e.message);
   }
@@ -375,6 +427,9 @@ function render(page) {
   theme(d.about && (d.about.theme || d.about.parentTheme));
   seasonTabs(d.seasons && d.seasons.length > 1 && d.seasons, d.about);
   if (d.about) grid.append(aboutBlock(d.about));
+  if (d.about && d.about.type === 'movie' && d.about.Role) grid.append(el('div', 'season-head', 'Cast'), castBlock(d.about));
+  if (d.person) grid.append(personBlock(d.person));
+  if (d.person && d.items.length) grid.append(el('div', 'season-head films-head', 'In your library'));
   // ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
   const items = d.items;
   // A library's whole listing gets the letter strip down its side and the search in the header.
@@ -416,9 +471,13 @@ function render(page) {
   });
   if (indexed) filter();
   else letters(false);
-  if (!d.items.length && !d.about) status('Nothing here');
+  if (!d.items.length && !d.about && !d.person) status('Nothing here');
   // A page opens on its first card, or with none, a movie's Play; Back returns to where it was.
-  focusCard(page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0]);
+  const first = page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0];
+  // A person's page opens at its top, bio first, wherever its first film is.
+  if (d.person && !(page.at >= 0)) {
+    if (first) first.focus({ preventScroll: true });
+  } else focusCard(first);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
 
@@ -493,6 +552,37 @@ function aboutBlock(a) {
     text.append(actions);
   }
   box.append(text);
+  return box;
+}
+
+// A movie's cast under its details, as its page's metadata lists them: a photo, the name and the
+// part, initials where Plex has no photo. The photos come through the server's transcoder, which
+// fetches Plex's own at the size shown. One row, everyone in it: each person is a button, so the
+// D-pad lands on them like cards, and focusCard() scrolls the row along to the one focused. OK
+// opens their page.
+function castBlock(movie) {
+  const box = el('div', 'cast');
+  movie.Role.forEach((r) => {
+    const person = el('button', 'person');
+    person.append(face(r, 'face'), el('div', '', r.tag), el('div', 'dim', r.role));
+    person.onclick = () => openPerson(r, movie);
+    box.append(person);
+  });
+  return box;
+}
+
+// A cast entry's photo in its circle, or their initials where Plex has none.
+function face(r, cls) {
+  const initials = r.tag.split(' ').map((w) => w.charAt(0)).slice(0, 2).join('');
+  const box = el('div', cls, r.thumb ? '' : initials);
+  if (r.thumb) {
+    const img = new Image();
+    img.loading = 'lazy';
+    img.onload = () => img.classList.add('in');
+    // Sized for the person's page; the row's smaller circles share the one download.
+    img.src = url('/photo/:/transcode', { width: 600, height: 600, minSize: 1, url: r.thumb });
+    box.append(img);
+  }
   return box;
 }
 
@@ -572,17 +662,30 @@ const focusables = () =>
   shown('#seasons button').concat(shown('#grid button'), shown('#letters button'), shown('#search'));
 
 // The D-pad scrolls the page only by moving focus, and a show's details hold nothing to focus.
-// So the top row shows the page from its top, details and all; anything lower centres in view.
-// The letter strip doesn't scroll, so its letters only take focus.
+// So the top row shows the page from its top, details and all, unless details as long as a
+// person's bio push it below the screen; anything lower centres in view. The letter strip
+// doesn't scroll, so its letters only take focus.
 function focusCard(card) {
   if (!card) return;
   card.focus({ preventScroll: true });
   if (!$('grid').contains(card)) return;
-  const top = card.getBoundingClientRect().top;
-  if (shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= top)) {
+  // Along the cast's row, the one focused stays 80px clear of the screen's edges, as the row's
+  // ends are (.cast in index.html).
+  const row = card.parentNode;
+  if (row.classList.contains('cast')) {
+    const r = card.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    if (r.left < box.left + 80) row.scrollLeft -= box.left + 80 - r.left;
+    else if (r.right > box.right - 80) row.scrollLeft += r.right - (box.right - 80);
+  }
+  const grid = $('grid');
+  const r = card.getBoundingClientRect();
+  // Where the card's foot would be with the page at its top.
+  const footAtTop = r.bottom - grid.getBoundingClientRect().top + grid.scrollTop;
+  if (footAtTop > grid.clientHeight || shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= r.top)) {
     card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  } else if ($('grid').scrollTo) $('grid').scrollTo({ top: 0, behavior: 'smooth' });
-  else $('grid').scrollTop = 0; // Chromium 56 has no Element.scrollTo
+  } else if (grid.scrollTo) grid.scrollTo({ top: 0, behavior: 'smooth' });
+  else grid.scrollTop = 0; // Chromium 56 has no Element.scrollTo
 }
 
 function open(item) {
@@ -619,6 +722,7 @@ function move(dir) {
   const all = focusables();
   const cur = document.activeElement;
   if (all.indexOf(cur) < 0) return focusCard(all[0]);
+  // A person's bio: Up and Down scroll it a few lines at a time, and move on past its ends.
   // Up and Down keep to the side focus is on, the strip or the page; Left and Right cross.
   const strip = $('letters');
   const side = (b) => dir === 'left' || dir === 'right' || strip.contains(b) === strip.contains(cur);
@@ -1340,8 +1444,8 @@ function settingsKey(k) {
 // Forgets the server and its token, which only this browser's storage holds, and asks for a new
 // sign-in; Back there no longer returns to the libraries.
 function signOut() {
-  ['plexUrl', 'plexServer', 'plexToken'].forEach((name) => localStorage.removeItem(name));
-  Object.assign(cfg, { server: '', name: '', token: '' });
+  ['plexUrl', 'plexServer', 'plexToken', 'plexAccount'].forEach((name) => localStorage.removeItem(name));
+  Object.assign(cfg, { server: '', name: '', token: '', account: '' });
   signIn();
 }
 
@@ -1366,6 +1470,8 @@ async function signIn() {
     }
     if (!live()) return;
     signinScreen('Finding your\u00a0servers\u2026');
+    cfg.account = pin.authToken;
+    localStorage.setItem('plexAccount', cfg.account);
     const found = await servers(pin.authToken);
     if (!live()) return;
     if (!found.length) throw new Error('No Plex server on this account\u00a0answered');
@@ -1469,6 +1575,7 @@ function boot() {
   cfg.server = localStorage.getItem('plexUrl') || '';
   cfg.name = localStorage.getItem('plexServer') || '';
   cfg.token = localStorage.getItem('plexToken') || '';
+  cfg.account = localStorage.getItem('plexAccount') || '';
   if (!localStorage.getItem('clientId')) localStorage.setItem('clientId', 'hotaru-tv-' + Math.random().toString(16).slice(2));
   CLIENT['X-Plex-Client-Identifier'] = localStorage.getItem('clientId');
   subtitleStyle();
@@ -1495,4 +1602,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, RECENT, ADDED };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };
