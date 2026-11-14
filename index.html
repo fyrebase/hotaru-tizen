@@ -12,7 +12,10 @@
   .dim { color: rgba(255, 255, 255, .45); }
 
   header { padding: 48px 80px 0; height: 72px; }
-  #title { font-size: 40px; }
+  #title { font-size: 40px; vertical-align: middle; }
+  /* The app's icon, the Mac app's, on the home page before its title. The icon's own transparent
+     border is pulled in by the negative margins, so the square lines up with the page's edge. */
+  #logo { width: 88px; height: 88px; margin: -8px 12px -8px -9px; vertical-align: middle; }
   #status { margin-left: 24px; }
 
   /* The search, in the recessed track every value sits in (DESIGN.md), with Lucide's search icon. */
@@ -292,7 +295,7 @@
   <main id="browse" hidden>
     <img id="backdrop" alt="">
     <audio id="theme"></audio>
-    <header><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div></header>
+    <header><img id="logo" src="logo.png" alt="Hotaru" hidden><span id="title"></span><span id="status" class="dim"></span><input id="search" type="text" placeholder="Search" autocomplete="off" hidden><div id="seasons" class="track" hidden></div></header>
     <div id="grid"></div>
     <div id="letters" hidden></div>
     <aside id="settings"><nav id="settings-nav"></nav><div id="settings-page"></div></aside>

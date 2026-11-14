@@ -314,6 +314,7 @@ async function load(path) {
 }
 
 async function show(page) {
+  $('logo').hidden = page !== stack[0];
   $('title').textContent = page.title;
   status('');
   $('grid').classList.remove('in');
