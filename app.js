@@ -250,6 +250,8 @@ const $ = (id) => document.getElementById(id);
 const stack = []; // pages browsed into: { title, key, at }, the libraries first
 let playing = null; // { item, session, hls }
 let osdTimer;
+let seekTo = null; // where Left, Right, Rew and FF are taking playback, until it seeks there
+let seekTimer;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -564,6 +566,8 @@ function stop() {
   if (!playing) return;
   const v = $('video');
   clearInterval(playing.timer);
+  clearTimeout(seekTimer);
+  seekTo = null;
   report('stopped');
   // The item's resume point as Plex now has it, so its card or page resumes from here without
   // fetching it again: cleared past about 90%, where Plex marks it watched.
@@ -854,7 +858,7 @@ function clock(s) {
 
 function time() {
   const v = $('video');
-  $('osd-time').textContent = clock(v.currentTime) + ' / ' + clock(v.duration);
+  $('osd-time').textContent = clock(seekTo != null ? seekTo : v.currentTime) + ' / ' + clock(v.duration);
 }
 
 function osd() {
@@ -875,7 +879,16 @@ function playerKey(k) {
   if (k === 'play') v.play();
   if (k === 'pause') v.pause();
   const jump = { left: -10, right: 10, rew: -30, ff: 30 }[k];
-  if (jump) v.currentTime = Math.max(0, v.currentTime + jump);
+  // Presses add up on the clock and seek once they stop: every seek of a file straight off the
+  // server waits on the network, so seeking on each press makes the presses queue.
+  if (jump) {
+    seekTo = Math.max(0, Math.min((seekTo != null ? seekTo : v.currentTime) + jump, v.duration || Infinity));
+    clearTimeout(seekTimer);
+    seekTimer = setTimeout(() => {
+      v.currentTime = seekTo;
+      seekTo = null;
+    }, 600);
+  }
   osd();
 }
 
