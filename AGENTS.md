@@ -22,6 +22,8 @@ The `tv-dev` branch is a dev shell: a module that loads the app from the Mac's w
 
 TizenBrew loads the module from `gh/<owner>/<repo>` through jsDelivr, which caches a branch for up to 12 hours. To see a change on the TV sooner, purge each changed file once, a few seconds after pushing: `https://purge.jsdelivr.net/gh/<owner>/<repo>/<file>`. Repeated purges get a file throttled (`"throttled": true`) for about half an hour, and purging while throttled seems to extend it. To test a commit at once, add the module pinned to it, `<owner>/<repo>@<sha>`, which jsDelivr has never cached; remove it afterwards.
 
+The app also installs without TizenBrew, as a `.wgt` through `apps2samsung-cli`: `./deploy.sh` builds one from the working copy and installs it, and `./deploy.sh v0.2.0` installs a release's. It needs TV-Store open on the TV, with "Connect from Apps2Samsung" on in its Settings. Pushing a `v*` tag builds a release (`.github/workflows/release.yml`).
+
 On the owner's TV, TizenBrew's autolaunch is off; if it's on, pressing Up repeatedly while TizenBrew starts skips it for that start. Holding Back in a running app returns to TizenBrew's menu; history.back() from the app doesn't. In the Module Manager, **Add GitHub module** adds `gh/` itself, so type only `fyrebase/hotaru-tizenbrew`. The box saves when it loses focus, not on Enter. Enter on a module's card asks to delete it.
 
 Running on the TV so far: sign-in, the libraries, D-pad navigation, HLS playback without hls.js, and HEVC MP4 played straight off the server: Dolby Vision profile 8 (Tuner) shows as Dolby Vision, smoothly. Not yet checked there: the media keys.
