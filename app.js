@@ -921,6 +921,14 @@ function cardMenu(item, card) {
   const row = { text: on ? 'Mark as Watched' : 'Mark as Unwatched', icon: on ? 'eye' : 'eyeClosed' };
   row.pick = () => markWatched(item, on, card);
   showMenu(label(item)[0], [row]);
+  // Over the page dimmed, under the card's own art: a copy, already loaded, so no fade.
+  const art = card.querySelector('.art').cloneNode(true);
+  Array.from(art.querySelectorAll('.glint')).forEach((g) => g.remove());
+  Array.from(art.querySelectorAll('img')).forEach((img) => img.classList.add('in'));
+  $('menu-art').className = card.classList.contains('wide') ? 'wide' : '';
+  $('menu-art').append(art);
+  $('menu').classList.add('card-menu');
+  $('browse').classList.add('pushed');
 }
 
 // Shown at once; if Plex refuses, the page reloads to show what it has.
@@ -954,6 +962,9 @@ function subtitleMenu() {
 // The menu's rows: { text, sub, on, icon, pick }, or a line of text alone without `pick`.
 let menuFocus = null;
 function showMenu(title, rows, focus) {
+  $('menu').className = '';
+  $('browse').classList.remove('pushed');
+  $('menu-art').innerHTML = '';
   $('menu-title').textContent = title;
   const list = $('menu-list');
   list.innerHTML = '';
@@ -1013,6 +1024,7 @@ function pickFound(p, found) {
 
 function closeMenu() {
   $('menu').hidden = true;
+  $('browse').classList.remove('pushed');
   if (menuFocus) menuFocus.focus({ preventScroll: true });
   menuFocus = null;
 }
