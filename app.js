@@ -183,6 +183,7 @@ async function sections() {
 }
 
 const poster = (thumb) => url('/photo/:/transcode', { width: 480, height: 720, minSize: 1, url: thumb });
+const still = (thumb) => url('/photo/:/transcode', { width: 640, height: 360, minSize: 1, url: thumb });
 
 // The codecs parameter `canPlayType` takes for Plex's codec names. HEVC is asked for at level
 // 5.1, 4K's, and as Main 10 when the file is 10-bit, so a "yes" covers the file.
@@ -315,11 +316,13 @@ function render(page) {
   $('search').hidden = !indexed;
   $('search').value = '';
   items.forEach((item) => {
-    const card = el('button', 'card');
+    // A show's or season's episodes show their 16:9 stills; Recently Played keeps to posters.
+    const wide = d.about && item.type === 'episode';
+    const card = el('button', wide ? 'card wide' : 'card');
     const img = new Image();
     img.loading = 'lazy';
     img.onload = () => img.classList.add('in');
-    if (item.thumb) img.src = poster(item.thumb);
+    if (item.thumb) img.src = wide ? still(item.thumb) : poster(item.thumb);
     const art = el('div', 'art');
     if (item.icon) art.innerHTML = ICONS[item.icon];
     else art.append(img);
