@@ -1021,9 +1021,44 @@ async function subtitleTracks(item) {
 }
 
 // Found subtitles live in localStorage as "subs:<ratingKey>:<title>", one per kind of track:
-// picking another English result replaces the last. ponytail: kept until the storage is full,
-// after which a find still shows but isn't kept; prune the oldest if that bites.
+// picking another English result replaces the last. SAVED_ORDER lists them oldest first, so a
+// full storage drops the oldest to make room (keepSubtitles()).
 const SAVED = 'subs:';
+const SAVED_ORDER = 'subsOrder';
+const subtitleKeys = () => Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k) => k.indexOf(SAVED) === 0);
+
+// The saved subtitles to drop first, of `keys`: any from before the order was kept, then the
+// oldest in `order`. Never `keep`, the one being saved; null when nothing else is left.
+function oldestSubtitle(keys, order, keep) {
+  const others = keys.filter((k) => k !== keep);
+  const unlisted = others.filter((k) => order.indexOf(k) < 0);
+  if (unlisted.length) return unlisted[0];
+  return order.filter((k) => others.indexOf(k) >= 0)[0] || null;
+}
+
+// Saves a found subtitle as the newest, dropping the oldest until it fits. False if the storage
+// refuses it for a reason other than room, or it can't fit even alone, which drops every other
+// on the way. ponytail: a film's subtitles are ~100 KB of the TV's few MB, so that last never
+// comes up; check the size against what's free first if it does.
+function keepSubtitles(key, text) {
+  let order = JSON.parse(localStorage.getItem(SAVED_ORDER) || '[]').filter((k) => k !== key).concat(key);
+  for (;;) {
+    try {
+      localStorage.setItem(key, text);
+      localStorage.setItem(SAVED_ORDER, JSON.stringify(order));
+      return true;
+    } catch (e) {
+      const full = e.name === 'QuotaExceededError' || e.code === 22;
+      const old = full && oldestSubtitle(subtitleKeys(), order, key);
+      if (!old) {
+        localStorage.removeItem(key);
+        return false;
+      }
+      localStorage.removeItem(old);
+      order = order.filter((k) => k !== old);
+    }
+  }
+}
 function savedSubtitles(item) {
   const prefix = SAVED + item.ratingKey + ':';
   const out = [];
@@ -1074,11 +1109,8 @@ async function downloadSubtitles(item, found) {
       await put('/library/parts/' + added.part.id, { subtitleStreamID: 0, allParts: 1 });
     }
     const title = found.displayTitle || 'Subtitles';
-    try {
-      localStorage.setItem(SAVED + item.ratingKey + ':' + title, text);
-    } catch (e) {
-      // Storage full: shown this once, not kept.
-    }
+    // Shown this once even if it can't be kept.
+    keepSubtitles(SAVED + item.ratingKey + ':' + title, text);
     return { title, text };
   }
   throw new Error("Plex didn't finish downloading them");
@@ -1743,4 +1775,4 @@ function boot() {
 }
 
 if (typeof document !== 'undefined') boot();
-if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };
+if (typeof module === 'object') module.exports = { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED };

@@ -1,6 +1,6 @@
 // Run with `node check.js`: the playback choice and labels, away from any DOM or Plex server.
 const assert = require('assert');
-const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
+const { cfg, url, stream, heading, clock, candidates, recentFolders, oneEachShow, nextAfter, label, timeline, facts, credits, nearest, letterOf, fold, matchesWord, parseCues, cuesAt, textStreams, rankFound, oldestSubtitle, keepSubtitles, titleLines, watched, canMarkWatched, setWatched, lifeLine, RECENT, ADDED } = require('./app.js');
 
 Object.assign(cfg, { server: 'http://plex:32400', token: 't' });
 const item = (container, codec, audio, profile) => ({
@@ -164,6 +164,38 @@ assert.deepEqual(textStreams({}), []);
 // OpenSubtitles results: an exact match first, then by score.
 const ranked = rankFound([{ key: 'a', score: '9' }, { key: 'b', score: '3', perfectMatch: '1' }, { key: 'c', score: '12' }, { key: 'd' }]);
 assert.deepEqual(ranked.map((f) => f.key), ['b', 'c', 'a', 'd']);
+
+// Saved subtitles: dropped oldest first, those from before the order was kept before any, and
+// never the one being saved.
+assert.equal(oldestSubtitle(['subs:1:En', 'subs:2:En', 'subs:3:En'], ['subs:2:En', 'subs:3:En'], 'subs:3:En'), 'subs:1:En');
+assert.equal(oldestSubtitle(['subs:2:En', 'subs:3:En'], ['subs:9:En', 'subs:2:En', 'subs:3:En'], 'subs:3:En'), 'subs:2:En');
+assert.equal(oldestSubtitle(['subs:3:En'], ['subs:3:En'], 'subs:3:En'), null);
+// A storage that holds 12 characters of subtitles, as a TV's holds a few megabytes; the order
+// list isn't counted, to keep the sums simple.
+global.localStorage = (() => {
+  const m = new Map();
+  return {
+    get length() { return m.size; },
+    key: (i) => Array.from(m.keys())[i],
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    removeItem: (k) => m.delete(k),
+    setItem(k, v) {
+      const used = Array.from(m).reduce((n, e) => n + (e[0] === k || e[0] === 'subsOrder' ? 0 : e[1].length), 0);
+      if (k !== 'subsOrder' && used + String(v).length > 12) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' });
+      m.set(k, String(v));
+    }
+  };
+})();
+assert.ok(keepSubtitles('subs:1:En', 'aaaa'));
+assert.ok(keepSubtitles('subs:2:En', 'bbbb'));
+assert.ok(keepSubtitles('subs:1:En', 'aaaa')); // saved again, so now the newest
+assert.ok(keepSubtitles('subs:3:En', 'c'.repeat(8))); // fits only once 2, now the oldest, goes
+assert.equal(localStorage.getItem('subs:2:En'), null);
+assert.equal(localStorage.getItem('subs:1:En'), 'aaaa');
+assert.deepEqual(JSON.parse(localStorage.getItem('subsOrder')), ['subs:1:En', 'subs:3:En']);
+assert.ok(!keepSubtitles('subs:4:En', 'd'.repeat(40)));
+assert.equal(localStorage.getItem('subs:4:En'), null);
+delete global.localStorage;
 
 // Search matches the start of a word, ignoring case, accents and punctuation.
 const finds = (title, q) => matchesWord(fold(title), fold(q));
