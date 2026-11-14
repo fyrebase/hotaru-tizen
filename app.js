@@ -791,7 +791,8 @@ function focusStill(b) {
   });
 }
 
-function focusCard(card) {
+// `now`: scroll there at once, not smoothly.
+function focusCard(card, now) {
   if (!card) return;
   focusStill(card);
   if (!$('grid').contains(card)) return;
@@ -810,15 +811,15 @@ function focusCard(card) {
   // Where the card's foot would be with the page at its top.
   const footAtTop = r.bottom - g.top + grid.scrollTop;
   if (footAtTop > grid.clientHeight || shown('#grid button').some((b) => b.getBoundingClientRect().bottom <= r.top)) {
-    scrollGrid(grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2));
-  } else scrollGrid(0);
+    scrollGrid(grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2), now);
+  } else scrollGrid(0, now);
 }
 
-// Scrolls the page to `top`, smoothly where the browser can. Worked out here, not by
+// Scrolls the page to `top`, smoothly where the browser can, unless `now`. Worked out here, not by
 // scrollIntoView({ block: 'center' }): Chromium 56 has neither 'center' nor Element.scrollTo.
-function scrollGrid(top) {
+function scrollGrid(top, now) {
   const grid = $('grid');
-  if (grid.scrollTo) grid.scrollTo({ top: top, behavior: 'smooth' });
+  if (grid.scrollTo && !now) grid.scrollTo({ top: top, behavior: 'smooth' });
   else grid.scrollTop = top;
 }
 
@@ -858,11 +859,12 @@ function back() {
 // D-pad: focus moves to the nearest button on screen in that direction, so the details' buttons,
 // a grid's short last row and the letter strip need no special cases. Left and right stay
 // within what overlaps the focus top to bottom: its row, or from a letter, the cards beside it.
-function move(dir) {
+// `now`: scroll at once, not smoothly, as holding Up or Down does (skipPage()).
+function move(dir, now) {
   const all = focusables();
   const cur = document.activeElement;
   // A page with nothing to focus at all, a person with no films in the library, only scrolls.
-  if (!all.length && (dir === 'up' || dir === 'down')) return scrollGrid($('grid').scrollTop + (dir === 'down' ? 0.8 : -0.8) * $('grid').clientHeight);
+  if (!all.length && (dir === 'up' || dir === 'down')) return scrollGrid($('grid').scrollTop + (dir === 'down' ? 0.8 : -0.8) * $('grid').clientHeight, now);
   if (all.indexOf(cur) < 0) return focusCard(all[0]);
   // What has nothing to focus, a person's bio above their films and their filmography below,
   // Up and Down read through a screenful at a time, keeping a fifth of the last in view: toward
@@ -874,8 +876,8 @@ function move(dir) {
     const r = cur.getBoundingClientRect();
     const g = grid.getBoundingClientRect();
     const centred = grid.scrollTop + (r.top + r.height / 2) - (g.top + grid.clientHeight / 2);
-    if (dir === 'down' && r.bottom > g.bottom) return scrollGrid(Math.min(grid.scrollTop + step, centred));
-    if (dir === 'up' && r.top < g.top) return scrollGrid(Math.max(grid.scrollTop - step, centred));
+    if (dir === 'down' && r.bottom > g.bottom) return scrollGrid(Math.min(grid.scrollTop + step, centred), now);
+    if (dir === 'up' && r.top < g.top) return scrollGrid(Math.max(grid.scrollTop - step, centred), now);
   }
   // Up and Down keep to the side focus is on, the strip or the page; Left and Right cross.
   const strip = $('letters');
@@ -883,12 +885,12 @@ function move(dir) {
   const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
   const to = nearest(cur.getBoundingClientRect(), others, dir);
   if (!to && dir === 'left') return openSettings();
-  if (!to && dir === 'up' && grid.contains(cur)) return scrollGrid(Math.max(0, grid.scrollTop - step));
-  if (!to && dir === 'down' && grid.contains(cur)) return scrollGrid(grid.scrollTop + step);
+  if (!to && dir === 'up' && grid.contains(cur)) return scrollGrid(Math.max(0, grid.scrollTop - step), now);
+  if (!to && dir === 'down' && grid.contains(cur)) return scrollGrid(grid.scrollTop + step, now);
   // Into the seasons, focus lands on the one showing, wherever the page's focus was.
   const tabs = $('seasons');
   const target = to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to;
-  focusCard(target);
+  focusCard(target, now);
   if (target && target.classList.contains('card')) land(target, dir);
 }
 
@@ -1719,6 +1721,7 @@ const KEYS = {
 // of OK in between go nowhere, so holding it doesn't pick the menu's first row.
 let hold = null;
 function onKeyUp(e) {
+  if (KEYS[e.keyCode] === held) held = null;
   if (KEYS[e.keyCode] !== 'enter' || !hold) return;
   if (hold !== true) {
     clearTimeout(hold);
@@ -1730,6 +1733,17 @@ function onKeyUp(e) {
 function onKey(e) {
   const k = KEYS[e.keyCode];
   if (!k) return;
+  // A key held down: Chromium 56 sets e.repeat, but a TV's remote may not, so another keydown
+  // soon after, with no keyup between, counts too. Soon, in case a keyup goes astray.
+  const repeat = e.repeat || (held === k && Date.now() - heldAt < 400);
+  // Pressed twice quickly, let go between: the second press of Up or Down goes to the end.
+  const double = !repeat && tapped === k && Date.now() - tappedAt < DOUBLE_WITHIN;
+  if (!repeat) {
+    tapped = double ? null : k;
+    tappedAt = Date.now();
+  }
+  held = k;
+  heldAt = Date.now();
   if (k === 'enter' && hold) return e.preventDefault();
   if (playing) {
     e.preventDefault();
@@ -1777,9 +1791,59 @@ function onKey(e) {
   }
   e.preventDefault();
   if (k === 'back') return back();
+  if (repeat && (k === 'up' || k === 'down')) return skipPage(k);
+  if (double && (k === 'up' || k === 'down')) return skipPage(k, true);
   if (k === 'left' || k === 'right' || k === 'up' || k === 'down') move(k);
 }
 
+// Up or Down held: a page at a time, every PAGE_EVERY ms, at once rather than smoothly, as each
+// repeat cut the last smooth scroll short and the page crept. From a card, focus goes to the
+// card in the same column a screen up or down, and the page moves by as much, so focus stays put
+// on the screen while the cards flip past. What has no card a page away steps as a press does:
+// through a person's bio, past a row of their films, along a movie's Play and cast.
+// Up or Down pressed twice within DOUBLE_WITHIN ms (`end`): to the page's very top or bottom at
+// once, focus on the column's first or last card if it was on a card, kept where it was if not.
+const PAGE_EVERY = 300;
+const DOUBLE_WITHIN = 300;
+let held = null;
+let heldAt = 0;
+let tapped = null;
+let tappedAt = 0;
+let skipped = 0;
+function skipPage(dir, end) {
+  const cur = document.activeElement;
+  const grid = $('grid');
+  // The letter strip, the seasons and the search step as ever.
+  if (!grid.contains(cur) && focusables().length) return move(dir);
+  if (!end && Date.now() - skipped < PAGE_EVERY) return;
+  skipped = Date.now();
+  const onCard = grid.contains(cur) && cur.classList.contains('card');
+  const from = cur.getBoundingClientRect();
+  const g = grid.getBoundingClientRect();
+  const offScreen = from.bottom <= g.top || from.top >= g.bottom;
+  if (!end && (!onCard || offScreen)) return move(dir, true);
+  // The card in the focused one's column a screen away, or at the end, the first or last.
+  const x = from.left + from.width / 2;
+  const want = from.top + (dir === 'down' ? 1 : -1) * grid.clientHeight;
+  let to = onCard ? [cur, from] : null;
+  let best = Infinity;
+  if (onCard) shown('#grid .card').forEach((c) => {
+    const r = c.getBoundingClientRect();
+    if (Math.abs(r.left + r.width / 2 - x) > r.width / 2) return;
+    const off = end ? (dir === 'down' ? -r.top : r.top) : Math.abs(r.top - want);
+    if (off < best) {
+      best = off;
+      to = [c, r];
+    }
+  });
+  if (end) {
+    if (to) focusStill(to[0]);
+    return scrollGrid(dir === 'down' ? grid.scrollHeight : 0, true);
+  }
+  if (to[0] === cur) return move(dir, true);
+  grid.scrollTop += to[1].top - from.top;
+  focusStill(to[0]);
+}
 
 // The time of day in the header and the playing overlay, in the TV's own format: "9:41 PM" or
 // "21:41". Checked each second, so it turns over with the minute.
