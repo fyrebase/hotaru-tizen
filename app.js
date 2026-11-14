@@ -408,7 +408,7 @@ function creditList(group, owned) {
 
 function openPerson(r, about) {
   const top = stack[stack.length - 1];
-  top.at = focusables().indexOf(document.activeElement);
+  remember(top);
   stack.push({ title: r.tag, person: r, section: about.librarySectionID });
   show(stack[stack.length - 1]);
 }
@@ -584,10 +584,13 @@ function render(page) {
   if (indexed) filter();
   else letters(false);
   if (!d.items.length && !d.about && !d.person) status('Nothing here');
-  // A page opens on its first card, or with none, a movie's Play; Back returns to where it was.
+  // A page opens on its first card, or with none, a movie's Play; Back returns to where it was,
+  // scrolled as it was at once, not scrolled from the top while the page fades in.
   const first = page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0];
-  // A person's page opens at its top, bio first, wherever its first film is.
-  if (d.person && !(page.at >= 0)) focusStill(first);
+  if (page.at >= 0 && page.scroll >= 0) {
+    grid.scrollTop = page.scroll;
+    focusStill(first);
+  } else if (d.person && !(page.at >= 0)) focusStill(first); // a person's page opens at its top, bio first
   else focusCard(first);
   requestAnimationFrame(() => grid.classList.add('in'));
 }
@@ -819,11 +822,17 @@ function scrollGrid(top) {
   else grid.scrollTop = top;
 }
 
+// Where a page was left, for coming back to it: what had focus, and how far it was scrolled.
+function remember(page) {
+  page.at = focusables().indexOf(document.activeElement);
+  page.scroll = $('grid').scrollTop;
+}
+
 function open(item) {
   // A movie gets its page; an episode plays straight from its card.
   if (item.Media && item.type !== 'movie') return play(item);
   const top = stack[stack.length - 1];
-  top.at = focusables().indexOf(document.activeElement);
+  remember(top);
   // A season's page leads with its show. "All episodes" doesn't name the show, but it's opened
   // from the show's own page, whose title is the show.
   const parent = item.parentTitle || (/\/allLeaves$/.test(item.key) && top.title);
@@ -1018,7 +1027,7 @@ function stop() {
   // A movie's page offers Resume or Play by where it was left.
   const top = stack[stack.length - 1];
   if (top && top.data && top.data.about === it) {
-    top.at = focusables().indexOf(document.activeElement);
+    remember(top);
     render(top);
   }
 }
@@ -1231,7 +1240,7 @@ function markWatched(item, on, card) {
     })
     .catch((e) => {
       const top = stack[stack.length - 1];
-      top.at = focusables().indexOf(document.activeElement);
+      remember(top);
       show(top).then(() => status("Couldn't mark it: " + e.message));
     });
 }
