@@ -274,7 +274,10 @@ async function load(path) {
   // A show's seasons, a season's episodes, or all a show's episodes: the listing has a line of
   // summary at most, so fetch the item it lists too.
   const both = await Promise.all([list(path), list('/library/metadata/' + id[1])]);
-  return { items: both[0], about: both[1][0] };
+  const about = both[1][0];
+  // A season's page also lists its show's seasons, to switch between them.
+  const seasons = about.type === 'season' && (await list('/library/metadata/' + about.parentRatingKey + '/children').catch(() => []));
+  return { items: both[0], about: about, seasons: seasons && seasons.filter((s) => s.type === 'season') };
 }
 
 async function show(page) {
@@ -307,6 +310,7 @@ function render(page) {
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
   theme(d.about && (d.about.theme || d.about.parentTheme));
+  seasonTabs(d.seasons && d.seasons.length > 1 && d.seasons, d.about);
   if (d.about) grid.append(aboutBlock(d.about));
   // The libraries end with a way to sign in to another account or server, as Back there leaves
   // the app. ponytail: every item at once; page with X-Plex-Container-Size if big libraries crawl.
@@ -346,8 +350,30 @@ function render(page) {
   if (indexed) filter();
   else letters(false);
   if (!d.items.length && !d.about) status('Nothing here');
-  focusCard(focusables()[page.at || 0]);
+  // A page opens on its first card, or with none, a movie's Play; Back returns to where it was.
+  focusCard(page.at >= 0 ? focusables()[page.at] : grid.querySelector('.card') || focusables()[0]);
   requestAnimationFrame(() => grid.classList.add('in'));
+}
+
+// A season's page has its show's seasons top right, "S1", "S2", the one showing a raised key
+// (DESIGN.md: a choice in its recessed track). Switching keeps one page on the stack, so Back
+// goes to the show. `seasons`: the show's, or false for none.
+// ponytail: a long title and a dozen seasons would meet; scroll the track sideways if one does.
+function seasonTabs(seasons, current) {
+  const track = $('seasons');
+  track.innerHTML = '';
+  track.hidden = !seasons;
+  if (!seasons) return;
+  seasons.forEach((s, i) => {
+    const on = s.ratingKey === current.ratingKey;
+    const b = el('button', on ? 'tab on' : 'tab', s.title.replace(/^Season /, 'S'));
+    b.onclick = () => {
+      if (on) return;
+      stack[stack.length - 1] = { title: s.parentTitle + ' / ' + s.title, key: s.key, at: i };
+      show(stack[stack.length - 1]);
+    };
+    track.append(b);
+  });
 }
 
 // A show's theme tune, played once from its page and on through its seasons' pages, and stopped
@@ -468,10 +494,11 @@ function lightLetter(e) {
   if (l) Array.from($('letters').children).forEach((b) => b.classList.toggle('on', b.dataset.letter === l));
 }
 
-// Everything the D-pad can land on in the page: the details' buttons, the cards, the strip, then
-// the search, last so a page opens on its first card. Cards the search hides are left out.
+// Everything the D-pad can land on in the page: a season's page's seasons, the details' buttons,
+// the cards, the strip, then the search. Cards the search hides are left out.
 const shown = (selector) => Array.from(document.querySelectorAll(selector)).filter((b) => !b.hidden);
-const focusables = () => shown('#grid button').concat(shown('#letters button'), shown('#search'));
+const focusables = () =>
+  shown('#seasons button').concat(shown('#grid button'), shown('#letters button'), shown('#search'));
 
 // The D-pad scrolls the page only by moving focus, and a show's details hold nothing to focus.
 // So the top row shows the page from its top, details and all; anything lower centres in view.
@@ -525,7 +552,10 @@ function move(dir) {
   const strip = $('letters');
   const side = (b) => dir === 'left' || dir === 'right' || strip.contains(b) === strip.contains(cur);
   const others = all.filter((b) => b !== cur && side(b)).map((b) => [b, b.getBoundingClientRect()]);
-  focusCard(nearest(cur.getBoundingClientRect(), others, dir));
+  const to = nearest(cur.getBoundingClientRect(), others, dir);
+  // Into the seasons, focus lands on the one showing, wherever the page's focus was.
+  const tabs = $('seasons');
+  focusCard(to && tabs.contains(to) && !tabs.contains(cur) ? tabs.querySelector('.on') : to);
 }
 
 // The candidate (as [thing, rect]) nearest `from` in `dir`, weighing distance off the line of
