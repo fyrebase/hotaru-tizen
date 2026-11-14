@@ -22,6 +22,9 @@ How Hotaru looks and moves on the TV. Each rule is one the owner asked for, with
 - **A control that holds a value (the search, segmented choices such as seasons) sits in the recessed track:** `#0b0b0c`, an inner shade along the top (`inset 0 2px 4px rgba(0, 0, 0, .8)`) and a 1px highlight under the bottom edge (`0 1px 0 rgba(255, 255, 255, .08)`). The chosen choice is a raised key, and the rest are bare labels.
   Why: one pressed-in look marks every editable value.
 
+- **A card for a film or episode left partway shows how far along its art's foot:** the seek bar's blue on a dark track (`.progress`).
+  Why: what's partway through should read at a glance, in any grid or row.
+
 ## Color
 
 - **UI text and icons are never pure white.** Main text is 85% white (`rgba(255, 255, 255, .85)`), and secondary information is 45% (`.dim`): a season after the show's name, the play time, a card's detail. Subtitles are the exception: they're white by default, as on the Mac.

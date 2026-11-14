@@ -534,6 +534,14 @@ function cardFor(item, wide) {
   const art = el('div', 'art');
   if (item.icon) art.innerHTML = ICONS[item.icon];
   else art.append(img);
+  // Left partway: how far, along the art's foot.
+  if (item.viewOffset > 0 && item.duration > 0) {
+    const bar = el('i', 'progress');
+    const fill = el('i');
+    fill.style.width = Math.min(100, (100 * item.viewOffset) / item.duration) + '%';
+    bar.append(fill);
+    art.append(bar);
+  }
   const text = label(item);
   card.append(art, el('span', '', text[0]), el('span', 'dim', text[1] ? noOrphan(String(text[1])) : ' '));
   card.onclick = () => open(item);
@@ -1289,6 +1297,9 @@ function drawEye(card, item) {
   const on = watched(item);
   eye.className = on ? 'corner on' : 'corner';
   eye.innerHTML = ICONS[on ? 'eye' : 'eyeClosed'];
+  // Marked either way, it has no resume point left (setWatched()), so no progress to show.
+  const bar = card.querySelector('.progress');
+  if (bar && !(item.viewOffset > 0)) bar.remove();
 }
 
 // OK held on a card: what to do with its item. The row's eye shows what picking it turns it to.
