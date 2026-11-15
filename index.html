@@ -371,9 +371,11 @@
   }
   .switch.on .knob { transform: translateX(28px); }
   .row .tab { padding: 6px 16px; font-size: 24px; }
-  /* A group's heading over its rows: its name, and a line on what they share. */
-  #settings .group { padding: 0 16px 12px; }
-  #settings .group .dim { margin-top: 4px; font-size: 22px; }
+  /* A group's heading over its rows: its name, small, dim and spaced so it doesn't read as a row,
+     and a line on what they share. */
+  #settings .group { padding: 32px 16px 12px; color: rgba(255, 255, 255, .45); font-size: 22px; letter-spacing: .08em; text-transform: uppercase; }
+  #settings .group .dim { margin-top: 4px; letter-spacing: 0; text-transform: none; }
+  #settings .key.dim { color: rgba(255, 255, 255, .45); }
   #settings .account .dim { margin-top: 4px; font-size: 24px; }
   #settings .actions { padding-top: 32px; }
 

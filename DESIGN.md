@@ -46,6 +46,9 @@ How Hotaru looks and moves on the TV. Each rule is one the owner asked for, with
 - **Settings lists of like rows have a 1px hairline (`rgba(255, 255, 255, .08)`) between each row and the next, and none after the last.**
   Why: it separates rows without boxing them in, and a line under the last row looks like an unfinished list.
 
+- **A group heading in Settings is small, dim, uppercase and spaced (`.group`), and only goes over two or more rows.**
+  Why: in a row's own type it reads as a row that can't be focused, and a heading over one row adds nothing.
+
 - **A page either fits with its full bottom padding or clearly scrolls.** Never let it overflow by a few pixels.
   Why: a sliver of scroll suggests hidden content that isn't there.
 

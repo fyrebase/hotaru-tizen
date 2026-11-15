@@ -426,7 +426,7 @@ function personBlock(p) {
   // The whole bio, however long. The page opens at its top, the first film card being its first
   // focusable (focusCard()).
   if (p.bio && p.bio.summary) text.append(el('div', 'bio', noOrphan(p.bio.summary)));
-  if (!p.bio) text.append(el('div', 'dim', 'Sign in again, under Settings, Plex, to show biographies.'));
+  if (!p.bio) text.append(el('div', 'dim', 'Choose Switch server, under Settings, Plex, to show biographies.'));
   box.append(text);
   return box;
 }
@@ -1694,12 +1694,12 @@ function signinScreen(msg, code, choices) {
 // in localStorage. Sizes are in px, which at 1080 lines match the Mac's points at its usual size.
 // Its sliders step by 1; a remote needs bigger steps for the wide ranges.
 const SUBTITLE_PREFS = [
+  { name: 'subtitleColor', label: 'Text color', detail: 'The color subtitles are drawn in.', def: 0, min: 0, max: 2, choices: [['White', '#fff'], ['Yellow', '#ffd60a'], ['Cyan', '#64d2ff']] },
   // The TV's own, where the Mac sizes subtitles to its window instead.
   { name: 'subtitleSize', label: 'Text size', detail: 'How big subtitles are drawn.', def: 44, min: 28, max: 72, step: 2, unit: 'px' },
-  { name: 'subtitleColor', label: 'Text color', detail: 'The color subtitles are drawn in.', def: 0, min: 0, max: 2, choices: [['White', '#fff'], ['Yellow', '#ffd60a'], ['Cyan', '#64d2ff']] },
   { name: 'subtitleLineHeight', label: 'Line height', detail: 'Space between lines of text.', def: 160, min: 100, max: 200, step: 5, unit: '%' },
   { name: 'subtitleOpacity', label: 'Background', detail: 'How solid the box behind is.', def: 60, min: 0, max: 100, step: 5, unit: '%' },
-  { name: 'subtitlePadding', label: 'Padding', detail: 'Space around the text in the box.', def: 8, min: 0, max: 24, step: 1, unit: 'px' },
+  { name: 'subtitlePadding', label: 'Padding', detail: 'Space around the text in the box.', def: 8, min: 0, max: 48, step: 2, unit: 'px' },
   { name: 'subtitleRadius', label: 'Rounded corners', detail: "How round the box's corners are.", def: 2, min: 0, max: 16, step: 1, unit: 'px' }
 ];
 
@@ -1714,7 +1714,7 @@ const HOME_PREFS = [
   { name: 'homeArt', label: 'Background art', detail: 'Art from the focused library or show behind the home page.', def: 1, min: 0, max: 1, toggle: true }
 ];
 const PLAYER_PREFS = [
-  { name: 'pausedOverlay', label: 'Overlay when paused', detail: 'How long the title and seek bar stay up after pausing.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
+  { name: 'pausedOverlay', label: 'Hide the controls after', detail: 'When paused, the title and seek bar stay up this long.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
 ];
 const prefOf = (name) => SUBTITLE_PREFS.concat(CARD_PREFS, HOME_PREFS, PLAYER_PREFS).filter((p) => p.name === name)[0];
 
@@ -1730,7 +1730,7 @@ function subtitleStyle() {
   SUBTITLE_PREFS.forEach((p) => (v[p.name] = prefValue(p)));
   const s = document.documentElement.style;
   s.setProperty('--subs-size', v.subtitleSize + 'px');
-  s.setProperty('--subs-color', SUBTITLE_PREFS[1].choices[v.subtitleColor][1]);
+  s.setProperty('--subs-color', prefOf('subtitleColor').choices[v.subtitleColor][1]);
   s.setProperty('--subs-line', v.subtitleLineHeight / 100);
   s.setProperty('--subs-bg', 'rgba(0, 0, 0, ' + v.subtitleOpacity / 100 + ')');
   // As the Mac pads it: this either side, half above and below, where the leading adds to it.
@@ -1793,34 +1793,41 @@ const focusFirst = (box) => {
   if (b) b.focus();
 };
 
-// The card effects under one heading, which says once what they all cost, then the home page's.
+// The home page's art, then the card effects under a heading that says once what they all cost.
 function generalPage(page) {
-  const head = el('div', 'group');
-  head.append(el('div', '', 'Card effects'), el('div', 'dim', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.'));
-  page.append(head);
-  prefRows(page, CARD_PREFS);
-  const home = el('div', 'group');
-  home.style.paddingTop = '32px';
-  home.append(el('div', '', 'Home'));
-  page.append(home);
   prefRows(page, HOME_PREFS);
+  groupHead(page, 'Card effects', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.');
+  prefRows(page, CARD_PREFS);
 }
-// The Mac's: a sample over a stand-in for a bright picture, then the settings.
+// The Mac's: a sample over a stand-in for a bright picture, then the settings, the text's and the box's.
 function subtitlesPage(page) {
   const sample = el('div', 'sample');
   sample.append(el('span', 'subs-box', 'Subtitles will look like this,\nover one line or two.'));
   page.append(sample);
-  prefRows(page, SUBTITLE_PREFS);
+  groupHead(page, 'Text');
+  prefRows(page, SUBTITLE_PREFS.slice(0, 3));
+  groupHead(page, 'Box');
+  prefRows(page, SUBTITLE_PREFS.slice(3));
 }
 
+// A heading over a group of rows, and a line on what they share.
+function groupHead(page, title, detail) {
+  const head = el('div', 'group');
+  head.append(el('div', '', title));
+  if (detail) head.append(el('div', 'dim', detail));
+  page.append(head);
+}
+
+// Each group's rows in a list of their own, so the hairline stops at its last.
 function prefRows(page, prefs) {
+  const list = page.appendChild(el('div'));
   prefs.forEach((p) => {
     const b = el('button', 'row');
     b.dataset.pref = p.name;
     const text = el('span', 'text');
     text.append(el('span', '', p.label), el('span', 'dim', p.detail));
     b.append(text, el('span', 'control'));
-    page.append(b);
+    list.append(b);
     drawSetting(b);
   });
 }
@@ -1833,7 +1840,8 @@ function setPref(b, v) {
 }
 
 // The Mac's: the server and its address, then its actions, each a raised key in its own track.
-// Switching keeps this server until another is chosen; signing out forgets it.
+// Switching keeps this server until another is chosen; signing out forgets it, so it sits apart,
+// dim, and asks for a second press, forgotten once focus leaves it.
 function plexPage(page) {
   const who = el('div', 'account');
   who.append(el('div', '', cfg.name || 'Plex server'), el('div', 'dim', cfg.server));
@@ -1842,8 +1850,21 @@ function plexPage(page) {
     closeSettings();
     fn();
   };
-  actions.append(key('Switch server', null, then(signIn)), key('Sign out', null, then(signOut)));
-  page.append(who, actions);
+  const out = key('Sign out', null, () => {
+    if (b.dataset.sure) return then(signOut)();
+    b.dataset.sure = 1;
+    b.textContent = 'Press again to sign out';
+  });
+  const b = out.firstChild;
+  b.classList.add('dim');
+  b.onblur = () => {
+    delete b.dataset.sure;
+    b.textContent = 'Sign out';
+  };
+  const apart = el('div', 'actions');
+  apart.append(out);
+  actions.append(key('Switch server', null, then(signIn)));
+  page.append(who, actions, apart);
 }
 
 // A setting row's control, as on the Mac: a switch for on or off, the colours as a choice in its
