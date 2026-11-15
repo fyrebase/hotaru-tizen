@@ -442,7 +442,6 @@ function lifeLine(bio) {
 
 async function show(page) {
   $('logo').hidden = page !== stack[0];
-  if (page !== stack[0]) homeArts = {};
   $('browse').classList.toggle('home', page === stack[0]);
   // A person's name heads their bio instead (personBlock()).
   $('title').textContent = page.person ? '' : page.title;
@@ -505,17 +504,29 @@ async function busy(on) {
   $('browse').classList.remove('launch');
 }
 
-// The show's or movie's art, faint behind its page, fading in once it has loaded.
+// The show's or movie's art, faint behind its page. Two images, so new art loads into the hidden
+// one and crossfades with the one showing once it has loaded; none fades the art out.
+let backdropWant = '';
 function backdrop(art) {
-  const img = $('backdrop');
+  const imgs = Array.from(document.querySelectorAll('.backdrop'));
   // Full size on the home page, where it shows at 60%; behind any other page it's at 15%, where
   // half size looks the same and is a quarter as much to decode.
   const w = $('browse').classList.contains('home') ? 1920 : 960;
   const src = art ? url('/photo/:/transcode', { width: w, height: (w * 9) / 16, minSize: 1, url: art }) : '';
-  if (img.getAttribute('src') === src || (!src && !img.hasAttribute('src'))) return;
-  img.classList.remove('in');
-  if (src) img.src = src;
-  else img.removeAttribute('src');
+  backdropWant = src;
+  if (!src) return imgs.forEach((i) => i.classList.remove('in'));
+  const shown = imgs.filter((i) => i.classList.contains('in'))[0];
+  if (shown && shown.getAttribute('src') === src) return;
+  const next = imgs.filter((i) => i !== shown)[0];
+  // Chromium 56 may not load again what an image already has, so that one shows at once.
+  if (next.getAttribute('src') !== src) next.src = src;
+  else if (next.complete) reveal(next);
+}
+
+// Shows a loaded backdrop, unless other art was asked for while it loaded.
+function reveal(img) {
+  if (img.getAttribute('src') !== backdropWant) return;
+  document.querySelectorAll('.backdrop').forEach((i) => i.classList.toggle('in', i === img));
 }
 
 // A card's art loads once the card comes within a screen of view, and unloads once it's three
@@ -618,27 +629,32 @@ async function recentlyAdded(libraries) {
 // Worth continuing: left partway, or the next episode after one watched (upNext()).
 const resumable = (i) => i.viewOffset > 0 || /^Next: /.test(i.sub || '');
 
-// The home page: behind the focused library, the art of something in it, picked at random from
-// what was added last, a new pick on each visit home. Brighter than a page's backdrop, and shaded
-// toward the foot so the cards stay readable (#browse.home in index.html).
-let homeArts = {};
-function homeArt(e) {
-  const card = e.target;
-  if (!$('browse').classList.contains('home') || !card.item || !card.item.key) return;
-  if (!prefValue(prefOf('homeArt'))) return backdrop(null);
-  // A film or episode in Continue Watching has its own art, an episode its show's.
-  if (card.item.ratingKey) return backdrop(card.item.grandparentArt || card.item.art);
-  const path = card.item.key;
-  homeArts[path] = homeArts[path] || list(path + '?sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=30').then(
-    (items) => {
-      const arts = items.map((i) => i.art).filter(Boolean);
-      return arts[Math.floor(Math.random() * arts.length)] || null;
-    },
-    () => null
-  );
-  homeArts[path].then((art) => {
-    if (document.activeElement === card && $('browse').classList.contains('home')) backdrop(art);
-  });
+// The home page: behind it, the art of what its rows hold, Continue Watching's and Recently
+// Added's, one after another as often as Settings says, from a random start on each visit home,
+// which render() makes. It asks Plex for nothing the rows didn't. Brighter than a page's backdrop, and
+// shaded toward the foot so the cards stay readable (#browse.home in index.html). It holds while
+// a video plays over it.
+let homeArtAt = 0;
+let homeArtTimer = null;
+function homeArt(next) {
+  const b = $('browse');
+  clearTimeout(homeArtTimer);
+  if (!b.classList.contains('home')) return;
+  // Each wait read afresh, so a change in Settings takes from the next.
+  homeArtTimer = setTimeout(() => homeArt(true), prefValue(prefOf('homeArtSecs')) * 1000);
+  if (b.classList.contains('away')) return;
+  const d = stack[0].data;
+  if (!d || !d.shelves) return;
+  const arts = [];
+  d.shelves.forEach((shelf) => shelf.items.forEach((i) => {
+    // An episode has its show's art.
+    const art = i.grandparentArt || i.art;
+    if (art && arts.indexOf(art) < 0) arts.push(art);
+  }));
+  if (!arts.length) return;
+  homeArtAt = next ? homeArtAt + 1 : Math.floor(Math.random() * arts.length);
+  // Turned off in Settings, it keeps time, so turned back on it shows at the next.
+  backdrop(prefValue(prefOf('homeArt')) ? arts[homeArtAt % arts.length] : null);
 }
 
 function render(page) {
@@ -652,6 +668,7 @@ function render(page) {
   $('browse').classList.toggle('detail', !!d.about);
   grid.scrollTop = 0;
   backdrop(d.about && d.about.art);
+  if (page === stack[0]) homeArt(false);
   theme(d.about && (d.about.theme || d.about.parentTheme));
   seasonTabs(d.seasons && d.seasons.length > 1 && d.seasons, d.about);
   if (d.about) grid.append(aboutBlock(d.about));
@@ -1711,7 +1728,8 @@ const CARD_PREFS = [
   { name: 'cardEdge', label: 'Lit edges and shadows', detail: 'A rim of light along the top of each card, and a soft shadow under it.', def: 1, min: 0, max: 1, toggle: true }
 ];
 const HOME_PREFS = [
-  { name: 'homeArt', label: 'Background art', detail: 'Art from the focused library or show behind the home page.', def: 1, min: 0, max: 1, toggle: true }
+  { name: 'homeArt', label: 'Background art', detail: 'Behind the home page, art from Continue Watching and Recently Added, crossfading from one to the next.', def: 1, min: 0, max: 1, toggle: true },
+  { name: 'homeArtSecs', label: 'Change art every', detail: 'How long each piece of art stays before the next.', def: 15, min: 5, max: 60, step: 5, unit: 's' }
 ];
 const PLAYER_PREFS = [
   { name: 'pausedOverlay', label: 'Hide the controls after', detail: 'When paused, the title and seek bar stay up this long.', def: 30, min: 5, max: 120, step: 5, unit: 's' }
@@ -1795,6 +1813,7 @@ const focusFirst = (box) => {
 
 // The home page's art, then the card effects under a heading that says once what they all cost.
 function generalPage(page) {
+  groupHead(page, 'Home');
   prefRows(page, HOME_PREFS);
   groupHead(page, 'Card effects', 'Each costs a slower TV some smoothness. Turn them off if moving between cards stutters.');
   prefRows(page, CARD_PREFS);
@@ -2158,7 +2177,6 @@ function boot() {
   document.addEventListener('keydown', onKey);
   document.addEventListener('keyup', onKeyUp);
   $('grid').addEventListener('focusin', lightLetter);
-  $('grid').addEventListener('focusin', homeArt);
   $('grid').addEventListener('focusin', (e) => e.target.hold && drawEye(e.target, e.target.item));
   $('search').addEventListener('input', filter);
   $('grid').addEventListener('scroll', () => virt && virtSync());
@@ -2171,7 +2189,7 @@ function boot() {
     virtDraw();
     if (nth != null) focusStill(virtCard(nth));
   });
-  $('backdrop').onload = () => $('backdrop').classList.add('in');
+  document.querySelectorAll('.backdrop').forEach((i) => (i.onload = () => reveal(i)));
   $('osd-poster').onload = () => $('osd-poster').classList.add('in');
   tick();
   setInterval(tick, 1000);
