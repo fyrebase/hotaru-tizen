@@ -1,5 +1,5 @@
 {
-  "name": "hotaru-tizenbrew-dev",
+  "name": "hotaru-tizen-dev",
   "version": "0.0.0",
   "description": "Hotaru's dev shell: loads the app from a Mac's working copy, for testing on the TV without publishing.",
   "packageType": "app",
