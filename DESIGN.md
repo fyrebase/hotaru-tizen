@@ -1,6 +1,6 @@
 # Design rules
 
-How Hotaru looks and moves on the TV. Each rule is one the owner asked for, with the reason. Most come from the Mac app's `../gpui-player/DESIGN.md`, where each one's history is recorded; this file says how each applies to a 1920×1080 screen driven by a D-pad, and adds the rules that only the TV has. Sizes are CSS pixels at 1920×1080.
+How Hotaru looks and moves on the TV. Each rule is one the owner asked for, with the reason. Most come from the Mac app's `../hotaru/DESIGN.md`, where each one's history is recorded; this file says how each applies to a 1920×1080 screen driven by a D-pad, and adds the rules that only the TV has. Sizes are CSS pixels at 1920×1080.
 
 ## Focus
 

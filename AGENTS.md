@@ -1,12 +1,12 @@
 # Hotaru for Samsung TVs
 
-A Samsung TV app that browses and plays a Plex server: the TV counterpart of the macOS app in `../gpui-player`. `app.js` is the whole app, `index.html` its markup and styles, `package.json` the TizenBrew module manifest, `config.xml` the manifest of the standalone `.wgt` that Apps2Samsung installs, and `check.js` the one test. It runs two ways: as a TizenBrew module, or installed on its own through Apps2Samsung (see Publishing to the TV).
+A Samsung TV app that browses and plays a Plex server: the TV counterpart of the macOS app in `../hotaru`. `app.js` is the whole app, `index.html` its markup and styles, `package.json` the TizenBrew module manifest, `config.xml` the manifest of the standalone `.wgt` that Apps2Samsung installs, and `check.js` the one test. It runs two ways: as a TizenBrew module, or installed on its own through Apps2Samsung (see Publishing to the TV).
 
 ## Working here
 
 - No framework and no build step. TizenBrew serves the repo's files as they are, through jsDelivr, and the `.wgt` zips the same files.
 - Write for Tizen 4, which runs Chromium 56: no `?.`, `??`, object spread, `.at()` or trailing commas in calls in JS; no CSS grid, flex `gap`, `aspect-ratio` or `inset`.
-- How the app looks and moves, and why, is in `DESIGN.md`. Its rules come from the Mac app's `../gpui-player/DESIGN.md`, and the Plex API usage from its `src/plex.rs`: port from there before inventing.
+- How the app looks and moves, and why, is in `DESIGN.md`. Its rules come from the Mac app's `../hotaru/DESIGN.md`, and the Plex API usage from its `src/plex.rs`: port from there before inventing.
 - A `ponytail:` comment marks a deliberate shortcut and names its ceiling and the way past it.
 - Run `node check.js` after changing anything it exercises: it covers the pure functions `app.js` exports.
 
