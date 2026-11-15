@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The .wgt manifest, for installing without TizenBrew (Apps2Samsung, from a release). TizenBrew reads package.json instead. The release workflow stamps version from the tag. -->
+<!-- The .wgt manifest, for installing without TizenBrew (Apps2Samsung, from a release). TizenBrew reads package.json instead. The release workflow stamps version from the tag. The id keeps the repo's old name, hotaru-tizenbrew, so an installed copy updates in place. -->
 <widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="https://github.com/fyrebase/hotaru-tizenbrew" version="0.1.0" viewmodes="fullscreen">
     <access origin="*" subdomains="true"></access>
     <tizen:application id="HotaruPlex.Hotaru" package="HotaruPlex" required_version="2.3"/>
